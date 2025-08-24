@@ -3,15 +3,15 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 
-**Anafibre** is an analytical mode solver for cylindrical step-index optical fibers. It provides functions to compute the guided modes of cylindrical waveguides by solving dispersion relations and calculating the corresponding electromagnetic fields analytically.
+**Anafibre** is an analytical mode solver for cylindrical step-index optical fibres. It provides functions to compute the guided modes of cylindrical waveguides by solving dispersion relations and calculating the corresponding electromagnetic fields analytically.
 
 ## Features
 
 - 🔬 **Analytical Solutions**: Compute guided modes using exact analytical expressions
-- 🌈 **Mode Visualization**: Rich visualization of mode profiles and field distributions  
+- 🌈 **Mode Visualisation**: Rich visualisation of mode profiles and field distributions  
 - 📊 **Dispersion Analysis**: Calculate dispersion characteristics and effective indices
 - ⚡ **Fast Computation**: Efficient numerical methods for finding propagation constants
-- 🎯 **Flexible Design**: Support for both dielectric and magnetic fibers
+- 🎯 **Flexible Design**: Support for both dielectric and magnetic fibres
 - 📐 **Unit Support**: Optional integration with Astropy units for dimensional analysis
 
 ## Installation
@@ -50,12 +50,12 @@ pip install anafibre
 import numpy as np
 import anafibre as af
 
-# Create a step-index fiber
+# Create a step-index fibre
 core_radius = 4.1e-6  # 4.1 μm
 core_index = 1.46
 clad_index = 1.45
 
-fiber = af.StepIndexFibre(
+fibre = af.StepIndexFibre(
     core_radius=core_radius,
     n_core=core_index,
     n_clad=clad_index
@@ -65,19 +65,19 @@ fiber = af.StepIndexFibre(
 wavelength = 1550e-9  # 1550 nm
 
 # Get fundamental mode (HE11)
-fundamental_mode = fiber.HE(ell=1, n=1, wl=wavelength)
+fundamental_mode = fibre.HE(ell=1, n=1, wl=wavelength)
 
 # Display mode information  
 print(f"Fundamental mode: {fundamental_mode.mode_label()}")
 print(f"Effective index: {fundamental_mode.neff:.6f}")
 
-# For multi-mode fibers, get additional modes
+# For multi-mode fibres, get additional modes
 try:
-    te01 = fiber.TE(n=1, wl=wavelength)  # TE01 mode
-    tm01 = fiber.TM(n=1, wl=wavelength)  # TM01 mode
-    he21 = fiber.HE(ell=2, n=1, wl=wavelength)  # HE21 mode
+    te01 = fibre.TE(n=1, wl=wavelength)  # TE01 mode
+    tm01 = fibre.TM(n=1, wl=wavelength)  # TM01 mode
+    he21 = fibre.HE(ell=2, n=1, wl=wavelength)  # HE21 mode
 except:
-    pass  # Mode may not exist for this fiber
+    pass  # Mode may not exist for this fibre
 
 # Calculate field distributions
 mode = fundamental_mode  # Use the mode from above
@@ -93,7 +93,7 @@ H_field = mode.H(x=X, y=Y)  # Magnetic field
 
 ### StepIndexFibre
 
-The main class for defining step-index optical fibers:
+The main class for defining step-index optical fibres:
 
 ```python
 fiber = af.StepIndexFibre(
@@ -110,9 +110,9 @@ Represents a guided mode with methods to calculate fields and properties:
 
 ```python
 # Create specific modes
-mode = fiber.HE(ell=1, n=1, wl=1550e-9)  # Fundamental HE11 mode
-te_mode = fiber.TE(n=1, wl=1550e-9)      # TE01 mode  
-tm_mode = fiber.TM(n=1, wl=1550e-9)      # TM01 mode
+mode = fibre.HE(ell=1, n=1, wl=1550e-9)  # Fundamental HE11 mode
+te_mode = fibre.TE(n=1, wl=1550e-9)      # TE01 mode  
+tm_mode = fibre.TM(n=1, wl=1550e-9)      # TM01 mode
 
 # Mode properties
 print(f"Effective index: {mode.neff}")
@@ -148,10 +148,10 @@ plt.show()
 
 Check out the `notebooks/` directory for detailed examples:
 
-- Basic fiber mode calculations
+- Basic fibre mode calculations
 - Dispersion analysis
-- Mode field visualization  
-- Multi-mode fiber analysis
+- Mode field visualisation  
+- Multi-mode fibre analysis
 
 ## Requirements
 
@@ -183,7 +183,7 @@ If you use Anafibre in your research, please cite:
 ```bibtex
 @software{anafibre2024,
   author = {Golat, Sebastian},
-  title = {Anafibre: Analytical mode solver for cylindrical step-index fibers},
+  title = {Anafibre: Analytical mode solver for cylindrical step-index fibres},
   year = {2024},
   url = {https://github.com/Sevastienn/anafibre},
   version = {0.1.0}
@@ -199,4 +199,4 @@ If you use Anafibre in your research, please cite:
 ## Acknowledgments
 
 - Developed at King's College London
-- Inspired by classical optical fiber theory and numerical methods for waveguide analysis
+- Inspired by classical optical fibre theory and numerical methods for waveguide analysis

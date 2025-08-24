@@ -15,13 +15,25 @@ from .fields import GuidedMode
 # from .normalization import compute_power, compute_normalisation
 from .utils import units, _HAS_UNITS, _strip_unit
 from scipy.optimize import brentq
-# import refractiveindex
-from refractiveindex.refractiveindex  import RefractiveIndex, NoExtinctionCoefficient
+
+# Optional refractiveindex dependency
+try:
+    from refractiveindex.refractiveindex import RefractiveIndex, NoExtinctionCoefficient
+    _HAS_REFRACTIVEINDEX = True
+except ImportError:
+    _HAS_REFRACTIVEINDEX = False
+    RefractiveIndex = None
+    NoExtinctionCoefficient = None
 
 
         
 class RefractiveIndexMaterial:
     def __init__(self, shelf, book, page, **ri_kwargs):
+        if not _HAS_REFRACTIVEINDEX:
+            raise ImportError(
+                "RefractiveIndexMaterial requires the 'refractiveindex' package. "
+                "Install it with: pip install refractiveindex"
+            )
         BD = RefractiveIndex(**ri_kwargs)
         # Material(self.getMaterialFilename(shelf, book, page))
         self.material = BD.getMaterial(shelf=shelf, book=book, page=page)

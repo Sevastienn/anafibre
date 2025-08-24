@@ -3,7 +3,7 @@ Anafibre: Analytical mode solver for cylindrical step-index fibers.
 
 Author: Sebastian Golat
 Affiliation: King's College London
-Created: June 2024
+Created: August 2025
 
 Description:
 Anafibre provides functions to compute the guided modes of cylindrical waveguides by 

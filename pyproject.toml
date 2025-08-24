@@ -1,0 +1,130 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "anafibre"
+version = "0.1.0"
+description = "Analytical mode solver for cylindrical step-index fibers"
+readme = "README.md"
+license = {file = "LICENSE"}
+authors = [
+    {name = "Sebastian Golat", email = "sebastian.golat@gmail.com"},
+]
+maintainers = [
+    {name = "Sebastian Golat", email = "sebastian.golat@gmail.com"},
+]
+keywords = [
+    "optics",
+    "fiber",
+    "waveguide", 
+    "mode solver",
+    "electromagnetic",
+    "physics",
+    "simulation"
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
+requires-python = ">=3.8"
+dependencies = [
+    "numpy>=1.20.0",
+    "scipy>=1.7.0",
+    "matplotlib>=3.5.0",
+    "IPython>=7.0.0",
+]
+
+[project.optional-dependencies]
+units = ["astropy>=4.0.0"]
+refractiveindex = ["refractiveindex>=0.1.0"]
+dev = [
+    "pytest>=6.0",
+    "pytest-cov",
+    "black",
+    "isort",
+    "flake8",
+    "mypy",
+    "jupyter",
+    "notebook",
+]
+docs = [
+    "sphinx>=4.0",
+    "sphinx-rtd-theme",
+    "nbsphinx",
+    "pandoc",
+]
+all = ["anafibre[units,refractiveindex,dev,docs]"]
+
+[project.urls]
+Homepage = "https://github.com/Sevastienn/anafibre"
+Repository = "https://github.com/Sevastienn/anafibre"
+Documentation = "https://github.com/Sevastienn/anafibre#readme"
+Issues = "https://github.com/Sevastienn/anafibre/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/anafibre"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/notebooks",
+    "/README.md",
+    "/LICENSE",
+    "/pyproject.toml",
+]
+
+# Development tools configuration
+[tool.black]
+line-length = 88
+target-version = ['py38']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+known_first_party = ["anafibre"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+addopts = "--strict-markers --disable-warnings"
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+show_error_codes = true
+namespace_packages = true

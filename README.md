@@ -1,15 +1,18 @@
-# Anafibre
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-
+<h1>
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="./logo-dark.svg">
     <source media="(prefers-color-scheme: light)" srcset="./logo-light.svg">
-    <img alt="anafibre logo" src="./logo-light.svg" width="360">
+    <img alt="anafibre logo" src="./logo-light.svg" width="150">
   </picture>
 </p>
+</h1><br>
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+
+
 
 **Anafibre** is an analytical mode solver for cylindrical step-index optical fibres. It provides functions to compute the guided modes of cylindrical waveguides by solving dispersion relations and calculating the corresponding electromagnetic fields analytically.
 
@@ -192,7 +195,7 @@ If you use Anafibre in your research, please cite:
 @software{anafibre2024,
   author = {Golat, Sebastian},
   title = {Anafibre: Analytical mode solver for cylindrical step-index fibres},
-  year = {2024},
+  year = {2025},
   url = {https://github.com/Sevastienn/anafibre},
   version = {0.1.0}
 }
@@ -207,4 +210,4 @@ If you use Anafibre in your research, please cite:
 ## Acknowledgments
 
 - Developed at King's College London
-- Inspired by classical optical fibre theory and numerical methods for waveguide analysis
+

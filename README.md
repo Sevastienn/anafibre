@@ -3,6 +3,14 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./logo-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="./logo-light.svg">
+    <img alt="anafibre logo" src="./logo-light.svg" width="360">
+  </picture>
+</p>
+
 **Anafibre** is an analytical mode solver for cylindrical step-index optical fibres. It provides functions to compute the guided modes of cylindrical waveguides by solving dispersion relations and calculating the corresponding electromagnetic fields analytically.
 
 ## Features

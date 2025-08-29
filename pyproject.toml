@@ -16,7 +16,7 @@ maintainers = [
 ]
 keywords = [
     "optics",
-    "fiber",
+    "fibre",
     "waveguide", 
     "mode solver",
     "electromagnetic",

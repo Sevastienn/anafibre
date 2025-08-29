@@ -192,7 +192,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 If you use Anafibre in your research, please cite:
 
 ```bibtex
-@software{anafibre2024,
+@software{anafibre2025,
   author = {Golat, Sebastian},
   title = {Anafibre: Analytical mode solver for cylindrical step-index fibres},
   year = {2025},

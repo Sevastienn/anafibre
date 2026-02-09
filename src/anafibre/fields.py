@@ -28,6 +28,7 @@ from scipy.special import jv, kv, jvp, kve
 from scipy.constants import epsilon_0 as eps0, mu_0 as mu0, c as c0
 from .utils import units, _HAS_UNITS, _strip_unit
 from .dispersion import b_to_neff, b_to_kz
+import warnings
 
 
 # ---------------------------- small helpers ---------------------------------
@@ -192,204 +193,33 @@ class GuidedMode:
         u = V * np.sqrt(1 - self.b)
         w = V * np.sqrt(self.b)
 
-        kappasq1 = k1**2 - kz**2
-        gammasq2 = kz**2 - k2**2
-
         if A == 0 and B == 0:
             return 1.0
 
         DlnJ = jvp(ell, u)/jv(ell, u)
-        I1_plus = (u**2 - ell**2) / (2 * u**2) + DlnJ / u + DlnJ**2 / 2
+        I1_plus = 1/2 - ell**2 / (2 * u**2) + DlnJ / u + DlnJ**2 / 2
         I1_minus = ell / (u**2)
 
         # DlnK = -(kve(ell - 1, w) + kve(ell+1, w))/(2*kve(ell, w))
         DlnK = _wDlnK(ell, w)/w
-        I2_plus = (w**2 + ell**2) / (2 * w**2) - DlnK / w - DlnK**2 / 2
+        I2_plus = 1/2 + ell**2 / (2 * w**2) - DlnK / w - DlnK**2 / 2
         I2_minus = -ell / (w**2)
 
         alpha1_plus = (eps1 * np.abs(A) ** 2 + mu1 * np.abs(B) ** 2) / (np.abs(A) ** 2 + np.abs(B) ** 2)
         alpha2_plus = (eps2 * np.abs(A) ** 2 + mu2 * np.abs(B) ** 2) / (np.abs(A) ** 2 + np.abs(B) ** 2)
-        alpha_minus = (2 * np.imag(A * np.conj(B))) / (np.abs(A)**2 + np.abs(B)**2)
+        alpha_minus = (np.imag(A * np.conj(B))) / (np.abs(A)**2 + np.abs(B)**2)
 
-        term1 = (kz * k0) / kappasq1 * alpha1_plus * I1_plus
-        term2 = (kz**2 + k1**2) / kappasq1 * alpha_minus * I1_minus
-        term3 = (kz * k0) / gammasq2 * alpha2_plus * I2_plus
-        term4 = (kz**2 + k2**2) / gammasq2 * alpha_minus * I2_minus
+        term1 = a**2 *(kz * k0) / u**2 * alpha1_plus * I1_plus
+        term2 = a**2 *(kz**2 + k1**2) / u**2 * alpha_minus * I1_minus
+        term3 = a**2 *(kz * k0) / w**2 * alpha2_plus * I2_plus
+        term4 = a**2 *(kz**2 + k2**2) / w**2 * alpha_minus * I2_minus
 
         sigma = c0 * np.pi * a**2 * (term1 + term2 + term3 + term4)
-
-        # print(c0 * np.pi * a**2 * term1,c0 * np.pi * a**2 * term2,c0 * np.pi * a**2 * term3,c0 * np.pi * a**2 * term4)
-        # # print(r"|κ₁|^2 =", kappasq1, r"|κ₂|^2 =", gammasq2)
-        # print(r"α_+ =", alpha1_plus, r"α_2+ =", alpha2_plus, r"α_- =", alpha_minus)
-        # print(r"I₁+ =", I1_plus, r"I₁- =", I1_minus, r"I₂+ =", I2_plus, r"I₂- =", I2_minus)
-        # print("u =", u, r"w =", w)
-
-        # --- Diagnostic and robust fallback ---
-        # For hybrid modes (Im(A B*) != 0), numerical issues or sign mistakes in the
-        # analytic form can lead to non‑physical σ (<=0) or large mismatch.
-        # We estimate power numerically on a coarse polar grid and use it as a fallback.
-        def _is_bad(x):
-            return (not np.isfinite(x)) or (x <= 0)
-
-        sigma_num = None
-        use_numeric = _is_bad(sigma)
-        if not use_numeric:
-            # Compute numeric estimate only for hybrid cases or if sanity check fails
-            ab_im = np.imag(np.conj(B) * A)
-            if abs(ab_im) > 1e-12:
-                sigma_num = self._estimate_power_numeric(A, B)
-                # Compare relative mismatch if numeric is valid
-                if np.isfinite(sigma_num) and sigma_num > 0:
-                    rel = abs((sigma - sigma_num) / sigma_num)
-                    # Allow small discrepancies (<5%); otherwise prefer numeric
-                    if rel > 5e-2:
-                        use_numeric = True
-                else:
-                    sigma_num = None
-        import warnings
-        if use_numeric:
-            warnings.warn("Using numeric estimate for modal power", RuntimeWarning)
-            print("Using numeric estimate for modal power")
-            if sigma_num is None:
-                sigma_num = self._estimate_power_numeric(A, B)
-            if not np.isfinite(sigma_num) or sigma_num <= 0:
-                raise RuntimeError("Normalization failed: analytic σ invalid and numeric estimate also invalid.")
-            sigma = sigma_num
 
         N = 1.0 / np.sqrt(sigma)
         return N
 
-    # def _estimate_power_numeric(self, A, B, r_max_factor=5.0, Nr=512, Ntheta=64, tol=5e-3, max_iter=6, decay_mult=12.0):
-    #     """Estimate modal power via 1D radial integration with angle averaging.
-
-    #     P ≈ ∫_0^{R} 2π r ⟨S_z(r,θ)⟩_θ dr, where S_z = 1/2 Re(E × H*)·ẑ.
-    #     We use a modest number of angles and radial samples, and adaptively grow R
-    #     until the integral converges within `tol` or `max_iter` is reached.
-
-    #     Returns a float (SI units). On failure, returns NaN.
-    #     """
-    #     # Save original amplitudes and swap
-    #     A0, B0 = self.A, self.B
-    #     try:
-    #         self.A, self.B = complex(A), complex(B)
-    #         a = float(self.fibre.core_radius)
-    #         # Estimate cladding decay length 1/gamma (guided ⇒ gamma>0)
-    #         try:
-    #             n2 = float(self.fibre.n_clad(self.wavelength))
-    #             k2 = self.k0 * n2
-    #             gam2 = float(self.kz**2 - k2**2)
-    #             gamma = np.sqrt(gam2) if gam2 > 0 else 0.0
-    #         except Exception:
-    #             gamma = 0.0
-    #         r_dec = (1.0 / gamma) if (isinstance(gamma, (int, float)) and gamma > 0) else 0.0
-    #         base = max(r_max_factor * a, a + decay_mult * r_dec)
-    #         r_max = base if base > 0 else r_max_factor * max(a, 1.0)
-    #         P_prev = None
-    #         best = None
-
-    #         # Precompute angular samples
-    #         thetas = np.linspace(0.0, 2*np.pi, int(max(16, Ntheta)), endpoint=False)
-
-    #         for _ in range(int(max_iter)):
-    #             # Radial samples
-    #             Nr_i = int(max(128, Nr))
-    #             rho = np.linspace(0.0, r_max, Nr_i)
-    #             # Build mesh for angle averaging: (Ntheta, Nr)
-    #             Rho = np.tile(rho, (len(thetas), 1))
-    #             Phi = np.tile(thetas[:, None], (1, Nr_i))
-
-    #             # Compute fields and S_z
-    #             E = self.E(rho=Rho, phi=Phi, z=0)
-    #             H = self.H(rho=Rho, phi=Phi, z=0)
-    #             S = 0.5 * np.real(np.cross(E, np.conj(H)))
-    #             Sz = S[..., 2]  # shape (Ntheta, Nr)
-    #             # Angle-average at each radius
-    #             Sz_avg = np.mean(Sz, axis=0)  # (Nr,)
-    #             # Integrate 2π ∫ r Sz_avg(r) dr
-    #             P = 2*np.pi * np.trapz(rho * Sz_avg, rho)
-    #             P = float(np.real(P))
-    #             best = P
-
-    #             if P_prev is not None:
-    #                 rel = abs((P - P_prev) / (P if P != 0 else 1.0))
-    #                 if rel < tol and P > 0:
-    #                     break
-    #             P_prev = P
-    #             r_max *= 2.0
-
-    #         return best if (best is not None) else float('nan')
-    #     except Exception:
-    #         return float('nan')
-    #     finally:
-    #         self.A, self.B = A0, B0
-    def _estimate_power_numeric(self, A, B, r_max_factor=5.0, Nr=512, Ntheta=64,
-                            tol=5e-3, max_iter=6, decay_mult=12.0):
-        """Estimate modal power via 1D radial integration with angle averaging."""
-        # Guarded save
-        had_AB = hasattr(self, "A") and hasattr(self, "B")
-        if had_AB:
-            A0, B0 = self.A, self.B
-
-        try:
-            # Use the trial amplitudes locally
-            self.A, self.B = complex(A), complex(B)
-
-            a = float(self.fibre.core_radius)
-            # Estimate cladding decay length 1/gamma (guided ⇒ gamma>0)
-            try:
-                n2 = float(self.fibre.n_clad(self.wavelength))
-                k2 = self.k0 * n2
-                gam2 = float(self.kz**2 - k2**2)
-                gamma = np.sqrt(gam2) if gam2 > 0 else 0.0
-            except Exception:
-                gamma = 0.0
-
-            r_dec = (1.0 / gamma) if (isinstance(gamma, (int, float)) and gamma > 0) else 0.0
-            base = max(r_max_factor * a, a + decay_mult * r_dec)
-            r_max = base if base > 0 else r_max_factor * max(a, 1.0)
-
-            P_prev = None
-            best = None
-
-            thetas = np.linspace(0.0, 2*np.pi, int(max(16, Ntheta)), endpoint=False)
-
-            for _ in range(int(max_iter)):
-                Nr_i = int(max(128, Nr))
-                rho = np.linspace(0.0, r_max, Nr_i)
-                Rho = np.tile(rho, (len(thetas), 1))
-                Phi = np.tile(thetas[:, None], (1, Nr_i))
-
-                E = self.E(rho=Rho, phi=Phi, z=0)  # uses the temporary self.A/B set above
-                H = self.H(rho=Rho, phi=Phi, z=0)
-
-                S = 0.5 * np.real(np.cross(E, np.conj(H)))
-                Sz_avg = np.mean(S[..., 2], axis=0)
-                P = 2*np.pi * np.trapz(rho * Sz_avg, rho)
-                P = float(np.real(P))
-                best = P
-
-                if P_prev is not None:
-                    denom = P if P != 0 else 1.0
-                    if abs((P - P_prev) / denom) < tol and P > 0:
-                        break
-                P_prev = P
-                r_max *= 2.0
-
-            return best if (best is not None) else float('nan')
-
-        except Exception:
-            return float('nan')
-
-        finally:
-            # Restore only if we had them
-            if had_AB:
-                self.A, self.B = A0, B0
-            else:
-                # Clean up the temporaries to avoid leaving half-initialised attributes
-                if hasattr(self, "A"): del self.A
-                if hasattr(self, "B"): del self.B
-
-    def _compute_amplitudes(self, Normalise=False):
+    def _compute_amplitudes(self, Normalise=True):
         fibre = self.fibre
         ell = self.ell
         b = self.b
@@ -573,28 +403,131 @@ class GuidedMode:
 
         return spin_to_cartesian(F0, Fp, Fm).reshape(*shape, 3)
 
-    def Power(self, rho=None, phi=None, z=0, *, x=None, y=None):
-        if x is not None and y is not None:
+    def Power(self, rho=None, phi=None, z=0, *, x=None, y=None,
+            auto=None, extent_factor=8.0, N=1000, tol=1e-3, max_iter=8,
+            expand_factor=1.5, cache=True, geometry="square"):
+        """
+        Compute guided power by integrating <Sz> over the transverse plane.
+
+        Manual usage (existing):
+        - Power(x=X, y=Y, z=...)
+        - Power(rho=R, phi=PHI, z=...)
+
+        Auto usage (new):
+        - Power(z=...) or Power()
+            -> integrates on an expanding square grid until convergence.
+
+        Parameters for auto:
+        extent_factor : initial half-width L = extent_factor * core_radius
+        N            : grid resolution (NxN)
+        tol          : relative convergence tolerance on power
+        max_iter     : max expansion iterations
+        expand_factor: domain expansion multiplier each iteration
+        cache        : cache last auto result per settings
+        geometry     : currently only "square" is implemented for auto
+        """
+        # --- 1) Manual Cartesian grid (existing path) ---
+        if x is not None or y is not None:
+            if x is None or y is None:
+                raise ValueError("Provide both x and y.")
             x = np.asarray(x); y = np.asarray(y)
-            S = 0.5 * np.real(np.cross(self.E(x=x, y=y, z=z), np.conj(self.H(x=x, y=y, z=z))))
+
+            E = self.E(x=x, y=y, z=z)
+            H = self.H(x=x, y=y, z=z)
+            S = 0.5 * np.real(np.cross(E, np.conj(H)))  # (.., 3)
+
             dx = np.mean(np.diff(x[0, :])) if x.ndim == 2 else np.mean(np.diff(x))
             dy = np.mean(np.diff(y[:, 0])) if y.ndim == 2 else np.mean(np.diff(y))
             dA = dx * dy
+
             P = np.sum(S[..., 2]) * dA
             return P
-        elif rho is not None and phi is not None:
+
+        # --- 2) Manual polar grid (existing path) ---
+        if rho is not None or phi is not None:
+            if rho is None or phi is None:
+                raise ValueError("Provide both rho and phi.")
             rho = np.asarray(rho); phi = np.asarray(phi)
-            S = 0.5 * np.real(np.cross(self.E(rho=rho, phi=phi, z=z), np.conj(self.H(rho=rho, phi=phi, z=z))))
+
+            E = self.E(rho=rho, phi=phi, z=z)
+            H = self.H(rho=rho, phi=phi, z=z)
+            S = 0.5 * np.real(np.cross(E, np.conj(H)))
+
             # crude average area weight in polar sampling (assumes near-uniform grids)
-            # drho = np.mean(np.diff(rho[0, :])) if rho.ndim == 2 else np.mean(np.diff(rho))
-            # dphi = np.mean(np.diff(phi[:, 0])) if phi.ndim == 2 else np.mean(np.diff(phi))
+            # Note: this assumes rho and phi are 2D meshgrids with rho varying along axis=1 and phi along axis=0
             drho = rho[0, 1] - rho[0, 0]
             dphi = phi[1, 0] - phi[0, 0]
             dA = (rho * drho * dphi)
+
             P = np.sum(S[..., 2] * dA)
             return P
-        else:
+
+        # --- 3) No transverse grid provided: auto mode ---
+        if auto is False:
+            raise ValueError("No (x,y) or (rho,phi) provided and auto=False.")
+        if auto is None:
+            auto = True
+
+        if not auto:
             raise ValueError("Provide either (x, y) or (rho, phi) as input.")
+
+        if geometry != "square":
+            raise ValueError(f"Auto geometry '{geometry}' not supported (only 'square').")
+
+        # --- 4) Caching (recommended) ---
+        if cache:
+            key = (float(z), float(extent_factor), int(N), float(tol), int(max_iter), float(expand_factor), str(geometry))
+            cache_dict = getattr(self, "_power_cache", None)
+            if isinstance(cache_dict, dict) and cache_dict.get("key") == key:
+                return cache_dict["P"]
+
+        # --- 5) Determine core radius scale ---
+        # Try common attribute names; adjust if your class uses something else.
+        a = getattr(getattr(self, "fibre", None), "core_radius", None)
+        if a is None:
+            a = getattr(self, "core_radius", None)
+        if a is None:
+            raise AttributeError("Cannot auto-select grid: core radius not found (expected self.fibre.core_radius).")
+
+        # Handle astropy Quantity or plain float
+        try:
+            a_m = a.to_value("m")
+        except Exception:
+            a_m = float(a)
+
+        L = extent_factor * a_m
+
+        # --- 6) Expanding-grid integration until convergence ---
+        P_prev = None
+        last_rel = None
+
+        for it in range(max_iter):
+            xs = np.linspace(-L, L, N)
+            ys = np.linspace(-L, L, N)
+            X, Y = np.meshgrid(xs, ys, indexing="xy")
+
+            # Call the same function on explicit grid to avoid duplicating logic:
+            P = self.Power(x=X, y=Y, z=z, auto=False, cache=False)
+
+            if P_prev is not None:
+                last_rel = abs(P - P_prev) / (abs(P) + 1e-300)
+                if last_rel < tol:
+                    break
+
+            P_prev = P
+            L *= expand_factor
+
+        else:
+            # loop exhausted without break
+            warnings.warn(
+                f"Power auto-integration did not converge within max_iter={max_iter}. "
+                f"Last relative change was {last_rel}. Consider increasing N, extent_factor, or max_iter."
+            )
+
+        if cache:
+            self._power_cache = {"key": key, "P": P, "L": L, "N": N, "tol": tol, "max_iter": max_iter}
+
+        return P
 
     def __repr__(self):
         return (

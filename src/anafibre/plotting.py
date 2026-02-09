@@ -94,6 +94,234 @@ def plot_dispersion_chart(
     plt.tight_layout()
     return ax
 
+def plot_dispersion_vs_wavelength(
+    fibre,
+    ell=1,
+    wavelength_min=400.0, wavelength_max=700.0, Npoints=500,    # in nanometers
+    bmin=0, bmax=1,
+    mode_type=None,
+    show_bessel_zeros=True,
+    colorbar=False,
+    ax=None,
+    cbar_label=r'$F_\ell(b,\lambda)$',
+    show_xgrid=False,
+    show_bessel_grid=True,
+    bessel_grid_kwargs=None,
+    ylabel=True,
+    xlabel=True,
+    rasterized=True
+):
+    """
+    Same visualization as plot_dispersion_chart but with the horizontal axis
+    in wavelength (nm) instead of V. Wavelengths are sampled linearly
+    between wavelength_min and wavelength_max (nm).
+
+    The function attempts to convert wavelength -> V using either:
+        • fibre.V_from_wavelength(wavelength_in_m) or fibre.V_of_wavelength(...)
+        • or via core radius and refractive indices:
+            V(λ) = 2π * a / λ * sqrt(n_core(λ)^2 - n_clad(λ)^2)
+        Where `a` is fibre.core_radius or fibre.rho_0 and n_core/n_clad
+        can be callables (n(λ) ) or scalars.
+    """
+
+    # Build wavelength array (meters)
+    lam_nm = np.linspace(float(wavelength_min), float(wavelength_max), int(Npoints))
+    lam_m = lam_nm * 1e-9
+
+    # Helper: try user-provided conversion methods first
+    def _V_from_wavelength_try(lam):
+        # lam in meters, lam can be array
+        if hasattr(fibre, "V_from_wavelength"):
+            return np.asarray(fibre.V_from_wavelength(lam))
+        if hasattr(fibre, "V_of_wavelength"):
+            return np.asarray(fibre.V_of_wavelength(lam))
+        return None
+
+    V_try = None
+    try:
+        V_try = _V_from_wavelength_try(lam_m)
+    except Exception:
+        V_try = None
+
+    # Fallback: analytic conversion if possible: V = 2π * a / λ * sqrt(n1^2 - n2^2)
+    def _compute_V_via_indices(lam):
+        # lam : array in meters
+        # find core radius
+        a = None
+        if hasattr(fibre, "core_radius"):
+            a = fibre.core_radius
+        elif hasattr(fibre, "rho_0"):
+            a = fibre.rho_0
+        # handle astropy Quantity
+        try:
+            if hasattr(a, "to"):
+                a_val = float(a.to(units.m).value)
+            else:
+                a_val = float(a)
+        except Exception:
+            a_val = None
+
+        # refractive indices: prefer callables n_core(λ) and n_clad(λ) if available
+        n_core_obj = getattr(fibre, "n_core", None)
+        n_clad_obj = getattr(fibre, "n_clad", None)
+        n1_obj = getattr(fibre, "n1", None)
+        n2_obj = getattr(fibre, "n2", None)
+
+        n_core = n_core_obj or n1_obj
+        n_clad = n_clad_obj or n2_obj
+
+        if a_val is None or n_core is None or n_clad is None:
+            return None
+
+        # Evaluate n(λ). Accept scalars or callables. If callable, pass λ in meters.
+        def _eval_n(nobj, lam):
+            if callable(nobj):
+                try:
+                    return np.asarray(nobj(lam))
+                except Exception:
+                    # try with nanometers
+                    return np.asarray(nobj(lam * 1e9))
+            else:
+                return np.full_like(lam, float(nobj), dtype=float)
+
+        n_core_vals = _eval_n(n_core, lam)
+        n_clad_vals = _eval_n(n_clad, lam)
+
+        # ensure arrays
+        lam = np.asarray(lam, dtype=float)
+        V = 2.0 * np.pi * a_val / lam * np.sqrt(np.maximum(0.0, n_core_vals**2 - n_clad_vals**2))
+        return V
+
+    if V_try is None:
+        V_vals = _compute_V_via_indices(lam_m)
+    else:
+        V_vals = np.asarray(V_try)
+
+    if V_vals is None:
+        raise ValueError(
+            "Unable to convert wavelength -> V. Provide fibre.V_from_wavelength or attributes "
+            "core_radius and n_core/n_clad (or n1/n2), where n_* may be scalars or callables."
+        )
+
+    # Build b grid and mesh for F_dispersion
+    b_vals = np.linspace(bmin, bmax, int(Npoints))
+    WW, BB = np.meshgrid(lam_m, b_vals)      # WW: meters (x axis), BB: b
+    # Need corresponding V mesh
+    # broadcast V_vals (shape (Npoints,)) across rows to match WW shape
+    VV = np.tile(V_vals.reshape(1, -1), (b_vals.size, 1))
+
+    # evaluate F_dispersion (expects V in same units as used elsewhere)
+    F_grid = F_dispersion(fibre, ell=ell, b=BB, V=VV, mode_type=mode_type)
+
+    absmax = np.nanmax(np.abs(F_grid[np.isfinite(F_grid)]))
+    if np.isnan(absmax):
+        vmin, vmax = None, None
+    else:
+        vmax = absmax
+        vmin = -vmax
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(5, 4.5))
+    else:
+        fig = ax.figure
+
+    # pcolormesh with wavelength axis in nanometers for nicer ticks
+    ax.pcolormesh(lam_nm, b_vals, F_grid, cmap='RdBu_r', vmin=vmin, vmax=vmax, shading="auto", rasterized=rasterized)
+    ax.contour(lam_nm, b_vals, F_grid, levels=[0], colors='k', linewidths=1, linestyles='-')
+
+    if xlabel:
+        ax.set_xlabel("Wavelength (nm)")
+    if ylabel:
+        ax.set_ylabel(r"$b = (k_z^2-k_2^2)/(k_1^2-k_2^2)$")
+    ax.set_xlim(lam_nm[0], lam_nm[-1])
+    ax.set_ylim(bmin, bmax)
+    ax.set_title(rf"$\ell = {ell}$")
+
+    if colorbar:
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.25)
+        cb = fig.colorbar(plt.cm.ScalarMappable(norm=Normalize(vmin=vmin, vmax=vmax), cmap='RdBu_r'), cax=cax, orientation='vertical', label=cbar_label)
+        try:
+            cb.set_ticks([vmin, 0, vmax])
+            cb.set_ticklabels(['min', 0, 'max'])
+        except Exception:
+            pass
+        cb.ax.tick_params(labelsize=10)
+
+    zeros_in_range = np.array([])
+    if show_bessel_zeros:
+        # compute bessel zeros in V-space (as in the original) and attempt to map to wavelengths.
+        num_zeros = int((np.max(V_vals) - np.min(V_vals)) // np.pi) + 5
+        try:
+            zeros = jn_zeros(ell, num_zeros)
+            zeros_in_V = zeros[(zeros >= V_vals.min()) & (zeros <= V_vals.max())]
+            # map each zero V0 to an approximate wavelength.
+            lam_from_zero = []
+            # Try direct inversion assuming locally-constant refractive indices:
+            # λ ≈ 2π * a * sqrt(n_core^2 - n_clad^2) / V0
+            lam_approx = None
+            try:
+                # use mid-wavelength reference to estimate mapping
+                mid = np.mean(lam_m)
+                V_ref = _compute_V_via_indices(np.array([mid]))
+                if V_ref is not None and V_ref.size == 1 and V_ref[0] > 0:
+                    # compute factor f = λ * V / (2π a sqrt(...)) -> we invert directly below
+                    # implement approximate inversion: λ ≈ 2π * a * sqrt(n_core(mid)^2 - n_clad(mid)^2) / V0
+                    lam_approx_vals = []
+                    a = None
+                    if hasattr(fibre, "core_radius"):
+                        a = fibre.core_radius
+                    elif hasattr(fibre, "rho_0"):
+                        a = fibre.rho_0
+                    try:
+                        a_val = float(a.to(units.m).value) if hasattr(a, "to") else float(a)
+                    except Exception:
+                        a_val = None
+                    if a_val is not None:
+                        n_core_ref = None
+                        n_clad_ref = None
+                        n_core_obj = getattr(fibre, "n_core", None) or getattr(fibre, "n1", None)
+                        n_clad_obj = getattr(fibre, "n_clad", None) or getattr(fibre, "n2", None)
+                        if n_core_obj is not None and n_clad_obj is not None:
+                            try:
+                                n_core_ref = (n_core_obj(mid) if callable(n_core_obj) else float(n_core_obj))
+                                n_clad_ref = (n_clad_obj(mid) if callable(n_clad_obj) else float(n_clad_obj))
+                                for V0 in zeros_in_V:
+                                    lam_approx_vals.append(2.0*np.pi*a_val*np.sqrt(max(0.0, n_core_ref**2 - n_clad_ref**2)) / V0)
+                                lam_from_zero = np.array(lam_approx_vals) * 1e9  # to nm
+                            except Exception:
+                                lam_from_zero = np.array([])
+            except Exception:
+                lam_from_zero = np.array([])
+
+            # Keep only those that fall in wavelength range
+            if lam_from_zero.size > 0:
+                lam_lines_nm = lam_from_zero[(lam_from_zero >= lam_nm[0]) & (lam_from_zero <= lam_nm[-1])]
+            else:
+                lam_lines_nm = np.array([])
+
+            # Add top axis ticks for labelled zeros (use approximate mapping)
+            if lam_lines_nm.size > 0:
+                secax = ax.secondary_xaxis('top', functions=(lambda x: x, lambda x: x))
+                secax.set_xlim(lam_nm[0], lam_nm[-1])
+                secax.set_xticks(lam_lines_nm)
+                secax.set_xticklabels([rf"$j_{{{ell},{i+1}}}$" for i in range(len(lam_lines_nm))])
+                # draw vertical grid lines at these approx wavelengths if requested
+                if show_bessel_grid:
+                    line_style = dict(color="gray", linestyle="--", linewidth=.5, alpha=0.6, zorder=2)
+                    if bessel_grid_kwargs:
+                        line_style.update(bessel_grid_kwargs)
+                    for x in lam_lines_nm:
+                        ax.axvline(x, **line_style)
+        except Exception:
+            # ignore bessel-zero plotting errors
+            pass
+
+    if show_xgrid:
+        ax.grid(axis='x', linestyle=':', color='gray', alpha=0.5)
+
+    plt.tight_layout()
+    return ax
 
 def add_visible_spectrum(ax, position=[0, 0, 1, 0.01], wavelengths=np.linspace(400, 700, 300), xlim=None, resolution=300):
     """
@@ -825,6 +1053,234 @@ def plot_complex_field_polar(
     return fig, ax, cb_phase, cb_mag
 
 
+# def animate_fields_xy(
+#     *,
+#     # --- Option A: give modes (one or many) ---
+#     modes=None,            # GuidedMode or list[GuidedMode]
+#     weights=None,          # complex or list[complex] (amplitudes/relative phases), default 1
+#     n_radii=2.0,           # grid half-size in units of core radius (when building grid)
+#     Np=200,                # grid resolution per axis
+
+#     # --- Option B: give fields with their own ω ---
+#     fields=None,           # list of tuples (E, H, omega) with E/H phasors on same X,Y grid
+#     X=None, Y=None,        # grid for Option B (required if fields given)
+
+#     # --- Plot controls ---
+#     show=("E","H"),        # any subset of {"E","H"}; e.g. ("E",) to animate only E
+#     scale="auto",          # relative multiplier for auto quiver scale ("auto" -> 1.0)
+#     zscale=None,           # color scale for Ez/Hz (auto if None)
+#     cmap='RdBu_r',
+#     n_frames=60,           # frames over θ∈[0,2π)
+#     interval=50,           # ms between frames
+#     figsize=(8,4.5),
+# ):
+#     """
+#     Animate instantaneous fields in an XY cross‑section.
+
+#     Usage:
+#       • Single or multiple modes (possibly different wavelengths):
+#           anim = animate_fields_xy(modes=[m1, m2], weights=[1.0, 0.7*np.exp(1j*np.pi/3)])
+#           # grid auto‑generated to ±n_radii * core_radius of the FIRST mode
+
+#       • Precomputed fields with distinct frequencies on a given grid:
+#           fields=[(E1,H1,omega1), (E2,H2,omega2)], X=..., Y=...
+#           anim = animate_fields_xy(fields=fields, X=X, Y=Y)
+
+#     Returns: matplotlib.animation.FuncAnimation
+
+#     Parameters
+#     ----------
+#     scale : {"auto", float}
+#         Relative multiplier applied to the automatically determined quiver scale
+#         from the transverse field amplitude in each panel (E and/or H). Use
+#         "auto" or None for factor 1.0; provide a number (e.g., 0.7 or 1.5)
+#         to shrink/enlarge arrows with respect to autoscale.
+#     """
+#     from matplotlib.animation import FuncAnimation
+#     from scipy.constants import epsilon_0 as eps0, mu_0 as mu0, c as c0
+#     import numpy as np
+#     from scipy.optimize import brentq
+#     from scipy.special import jn_zeros
+
+#     def _to_um(arr):
+#         if _HAS_UNITS and hasattr(arr, "unit"):
+#             return arr.to_value(units.um)
+#         return np.asarray(arr) * 1e6  # assume meters
+
+#     # ---------------------------
+#     # Build component list (E_k, H_k, ω_k)
+#     # ---------------------------
+#     comps = []  # list of (E_k, H_k, omega_k)
+
+#     if modes is not None:
+#         # Normalize to list
+#         modes = modes if isinstance(modes, (list, tuple)) else [modes]
+#         if weights is None:
+#             weights = [1.0] * len(modes)
+#         if not isinstance(weights, (list, tuple)):
+#             weights = [weights]
+#         if len(weights) != len(modes):
+#             raise ValueError("weights must match modes in length.")
+
+#         # Build grid if X,Y not given yet (use first mode's fibre radius)
+#         if X is None or Y is None:
+#             a = modes[0].fibre.core_radius  # meters
+#             L = float(n_radii) * a
+#             x = np.linspace(-L, L, Np)
+#             y = np.linspace(-L, L, Np)
+#             X, Y = np.meshgrid(x, y)
+
+#         # Evaluate each mode on the same grid
+#         for m, w in zip(modes, weights):
+#             E = np.asarray(m.E(x=X, y=Y)) * w
+#             H = np.asarray(m.H(x=X, y=Y)) * w
+#             omega = 2*np.pi * c0 / np.asarray(m.wavelength if not _HAS_UNITS else m.wavelength.to_value(units.m))
+#             comps.append((E, H, omega))
+
+#     if fields is not None:
+#         if X is None or Y is None:
+#             raise ValueError("When using 'fields=', you must also provide X and Y.")
+#         for (E, H, omega) in fields:
+#             comps.append((np.asarray(E), np.asarray(H), float(omega)))
+
+#     if not comps:
+#         raise ValueError("Provide either 'modes=' or 'fields='.")
+
+#     # Ensure X,Y are numpy arrays (meters); convert copies for plotting in μm
+#     X = np.asarray(X); Y = np.asarray(Y)
+#     X_um = _to_um(X); Y_um = _to_um(Y)
+#     extent = [X_um.min(), X_um.max(), Y_um.min(), Y_um.max()]
+
+#     # Reference frequency for phase driving
+#     omegas = np.array([om for (_,_,om) in comps], dtype=float)
+#     omega_ref = omegas[0]
+#     ratios = omegas / omega_ref  # r_k
+
+#     # Precompute scales for instantaneous snapshots
+#     # Escale = np.sqrt(eps0)
+#     # Hscale = np.sqrt(mu0)
+
+#     # Convenience: what panels to draw
+#     showE = "E" in show
+#     showH = "H" in show
+#     ncols = int(showE) + int(showH)
+#     if ncols == 0:
+#         raise ValueError("Nothing to show: set show=('E',), ('H',) or ('E','H').")
+
+#     # Initial snapshot (θ=0)
+#     def _sum_snap(theta):
+#         # Sum_k F_k * exp(-i r_k theta)
+#         Et = 0; Ht = 0
+#         for (Ek, Hk, rk) in zip((c[0] for c in comps), (c[1] for c in comps), ratios):
+#             ph = np.exp(-1j * rk * theta)
+#             Et = Et + Ek * ph
+#             Ht = Ht + Hk * ph
+
+#         # Real instantaneous fields; split last axis (…, 3) → (Ex, Ey, Ez)
+#         Ereal = np.real(Et) * Escale
+#         Hreal = np.real(Ht) * Hscale
+
+#         # Safety: ensure vector last axis exists and is length 3
+#         if Ereal.shape[-1] != 3 or Hreal.shape[-1] != 3:
+#             raise ValueError("Fields must have last axis of length 3 (Fx,Fy,Fz).")
+
+#         Ex, Ey, Ez = Ereal[..., 0], Ereal[..., 1], Ereal[..., 2]
+#         Hx, Hy, Hz = Hreal[..., 0], Hreal[..., 1], Hreal[..., 2]
+#         return (Ex, Ey, Ez), (Hx, Hy, Hz)
+
+#     # Initial fields at theta=0
+#     (Ex0, Ey0, Ez0), (Hx0, Hy0, Hz0) = _sum_snap(0.0)
+
+#     # z-scale
+#     if zscale is None:
+#         zvmax = 0.0
+#         if showE: zvmax = max(zvmax, np.max(np.abs(Ez0)))
+#         if showH: zvmax = max(zvmax, np.max(np.abs(Hz0)))
+#         if zvmax == 0: 
+#             zvmax = 1.0
+#     else:
+#         zvmax = zscale
+
+#     # Downsample for quiver
+#     Np_guess = X.shape[0]
+#     stride = max(1, Np_guess // 20)
+#     Xs = X_um[::stride, ::stride]
+#     Ys = Y_um[::stride, ::stride]
+
+#     # Auto quiver scale from transverse magnitudes (robust to outliers)
+#     def _auto_quiver_scale(Fx, Fy):
+#         mag = np.sqrt(Fx**2 + Fy**2)
+#         finite = mag[np.isfinite(mag)]
+#         if finite.size == 0:
+#             return 40.0
+#         rob = np.percentile(finite, 99)
+#         if rob <= 0 or not np.isfinite(rob):
+#             return 40.0
+#         return 1.0/rob * 20.0
+
+#     if (scale == "auto") or (scale is None):
+#         scale_factor = 1.0
+#     else:
+#         try:
+#             scale_factor = float(scale)
+#         except Exception:
+#             scale_factor = 1.0
+
+#     auto_scale_E = _auto_quiver_scale(Ex0, Ey0)
+#     auto_scale_H = _auto_quiver_scale(Hx0, Hy0)
+#     qscale_E = auto_scale_E * scale_factor
+#     qscale_H = auto_scale_H * scale_factor
+
+#     # Figure and artists
+#     fig, axes = plt.subplots(1, ncols, figsize=figsize, sharex=True, sharey=True)
+#     if ncols == 1: axes = [axes]
+#     artists = []
+
+#     idx = 0
+#     if showE:
+#         ax = axes[idx]; idx += 1
+#         imE = ax.imshow(Ez0.T, extent=extent, origin='lower', cmap=cmap,
+#                         vmin=-zvmax, vmax=zvmax, interpolation='nearest', aspect='equal')
+#         qE = ax.quiver(Xs, Ys, Ex0[::stride, ::stride], Ey0[::stride, ::stride],
+#                scale=qscale_E, color='k', pivot='middle', linewidth=0.5)
+#         ax.set_title(r'Electric field')
+#         artists += [imE, qE]
+
+#     if showH:
+#         ax = axes[idx]; idx += 1
+#         imH = ax.imshow(Hz0.T, extent=extent, origin='lower', cmap=cmap,
+#                         vmin=-zvmax, vmax=zvmax, interpolation='nearest', aspect='equal')
+#         qH = ax.quiver(Xs, Ys, Hx0[::stride, ::stride], Hy0[::stride, ::stride],
+#                scale=qscale_H, color='k', pivot='middle', linewidth=0.5)
+#         ax.set_title(r'Magnetic field')
+#         artists += [imH, qH]
+
+#     for ax in axes:
+#         ax.set_xlim(extent[0], extent[1])
+#         ax.set_ylim(extent[2], extent[3])
+#         ax.set_aspect('equal')
+#         ax.set_xlabel('$x$ [$\\mu$m]')
+#     axes[0].set_ylabel('$y$ [$\\mu$m]')
+#     plt.tight_layout()
+
+#     # Animation callback stepping θ∈[0,2π)
+#     def update(i):
+#         theta = 2*np.pi * i / n_frames
+#         (Ex, Ey, Ez), (Hx, Hy, Hz) = _sum_snap(theta)
+
+#         aidx = 0
+#         if showE:
+#             artists[aidx].set_data(Ez.T); aidx += 1
+#             artists[aidx].set_UVC(Ex[::stride, ::stride], Ey[::stride, ::stride]); aidx += 1
+#         if showH:
+#             artists[aidx].set_data(Hz.T); aidx += 1
+#             artists[aidx].set_UVC(Hx[::stride, ::stride], Hy[::stride, ::stride]); aidx += 1
+#         return artists
+
+#     anim = FuncAnimation(fig, update, frames=n_frames, interval=interval, blit=False)
+#     plt.close(fig)
+#     return anim
+
 def animate_fields_xy(
     *,
     # --- Option A: give modes (one or many) ---
@@ -838,38 +1294,42 @@ def animate_fields_xy(
     X=None, Y=None,        # grid for Option B (required if fields given)
 
     # --- Plot controls ---
-    show=("E","H"),        # any subset of {"E","H"}; e.g. ("E",) to animate only E
-    scale="auto",          # relative multiplier for auto quiver scale ("auto" -> 1.0)
-    zscale=None,           # color scale for Ez/Hz (auto if None)
-    cmap='RdBu_r',
-    n_frames=60,           # frames over θ∈[0,2π)
-    interval=50,           # ms between frames
-    figsize=(8,4.5),
+    show=("E", "H"),       # any subset of {"E","H"}
+    scale="auto",          # arrow size multiplier (1.0 if "auto")
+    zscale=None,           # color scale for Ez/Hz (robust auto if None)
+    cmap="RdBu_r",
+    n_frames=60,
+    interval=50,
+    figsize=(8, 4.5),
+
+    # --- Stability knobs ---
+    robust_p=99.0,         # percentile for robust scaling of color + field normalization
+    quiver_density=20,
+    quiver_scale=25.0,     # base quiver scale (smaller -> longer arrows)
+    eps=1e-30,
 ):
     """
-    Animate instantaneous fields in an XY cross‑section.
+    Animate instantaneous fields in an XY cross-section.
 
-    Usage:
-      • Single or multiple modes (possibly different wavelengths):
-          anim = animate_fields_xy(modes=[m1, m2], weights=[1.0, 0.7*np.exp(1j*np.pi/3)])
-          # grid auto‑generated to ±n_radii * core_radius of the FIRST mode
-
-      • Precomputed fields with distinct frequencies on a given grid:
-          fields=[(E1,H1,omega1), (E2,H2,omega2)], X=..., Y=...
-          anim = animate_fields_xy(fields=fields, X=X, Y=Y)
-
-    Returns: matplotlib.animation.FuncAnimation
-
-    Parameters
-    ----------
-    scale : {"auto", float}
-        Relative multiplier applied to the automatically determined quiver scale
-        from the transverse field amplitude in each panel (E and/or H). Use
-        "auto" or None for factor 1.0; provide a number (e.g., 0.7 or 1.5)
-        to shrink/enlarge arrows with respect to autoscale.
+    Option 2: RMS normalization for quiver arrows.
+      • Arrows preserve relative magnitudes.
+      • Transverse arrows are divided by RMS(|F_perp|) (computed once at theta=0),
+        giving a more energy-like visual normalization than max/percentile.
+      • z-colors use robust percentile scaling (unless zscale given).
+      • Works with astropy units via global _HAS_UNITS / units.
     """
+    import numpy as np
+    import matplotlib.pyplot as plt
     from matplotlib.animation import FuncAnimation
-    from scipy.constants import epsilon_0 as eps0, mu_0 as mu0, c as c0
+    from scipy.constants import c as c0
+
+    # ---------------------------
+    # Unit helpers using your global _HAS_UNITS/units
+    # ---------------------------
+    def _to_float_m(x):
+        if _HAS_UNITS and hasattr(x, "unit"):
+            return float(x.to_value(units.m))
+        return float(x)
 
     def _to_um(arr):
         if _HAS_UNITS and hasattr(arr, "unit"):
@@ -877,12 +1337,44 @@ def animate_fields_xy(
         return np.asarray(arr) * 1e6  # assume meters
 
     # ---------------------------
+    # Robust scaling helpers
+    # ---------------------------
+    def _robust_scale(arr, p=99.0, eps_=1e-30):
+        a = np.asarray(arr)
+        a = a[np.isfinite(a)]
+        if a.size == 0:
+            return 1.0
+        s = np.percentile(np.abs(a), p)
+        if (not np.isfinite(s)) or (s <= eps_):
+            return 1.0
+        return float(s)
+
+    def _robust_vec_scale(Fx, Fy, p=99.0, eps_=1e-30):
+        mag = np.sqrt(np.asarray(Fx)**2 + np.asarray(Fy)**2)
+        return _robust_scale(mag, p=p, eps_=eps_)
+
+    def _rms_perp_scale(Fx, Fy, eps_=1e-30):
+        """
+        RMS(|F_perp|) over finite entries.
+        Returns sqrt(mean(Fx^2 + Fy^2)).
+        """
+        Fx = np.asarray(Fx)
+        Fy = np.asarray(Fy)
+        mag2 = Fx**2 + Fy**2
+        mag2 = mag2[np.isfinite(mag2)]
+        if mag2.size == 0:
+            return 1.0
+        s = float(np.sqrt(np.mean(mag2)))
+        if (not np.isfinite(s)) or (s <= eps_):
+            return 1.0
+        return s
+
+    # ---------------------------
     # Build component list (E_k, H_k, ω_k)
     # ---------------------------
     comps = []  # list of (E_k, H_k, omega_k)
 
     if modes is not None:
-        # Normalize to list
         modes = modes if isinstance(modes, (list, tuple)) else [modes]
         if weights is None:
             weights = [1.0] * len(modes)
@@ -893,8 +1385,9 @@ def animate_fields_xy(
 
         # Build grid if X,Y not given yet (use first mode's fibre radius)
         if X is None or Y is None:
-            a = modes[0].fibre.core_radius  # meters
-            L = float(n_radii) * a
+            a = modes[0].fibre.core_radius  # meters or Quantity
+            a_m = _to_float_m(a)
+            L = float(n_radii) * a_m
             x = np.linspace(-L, L, Np)
             y = np.linspace(-L, L, Np)
             X, Y = np.meshgrid(x, y)
@@ -903,7 +1396,10 @@ def animate_fields_xy(
         for m, w in zip(modes, weights):
             E = np.asarray(m.E(x=X, y=Y)) * w
             H = np.asarray(m.H(x=X, y=Y)) * w
-            omega = 2*np.pi * c0 / np.asarray(m.wavelength if not _HAS_UNITS else m.wavelength.to_value(units.m))
+
+            wl = m.wavelength  # maybe Quantity (e.g. nm)
+            wl_m = float(wl.to_value(units.m)) if (_HAS_UNITS and hasattr(wl, "unit")) else float(wl)
+            omega = 2.0 * np.pi * c0 / wl_m
             comps.append((E, H, omega))
 
     if fields is not None:
@@ -915,41 +1411,46 @@ def animate_fields_xy(
     if not comps:
         raise ValueError("Provide either 'modes=' or 'fields='.")
 
-    # Ensure X,Y are numpy arrays (meters); convert copies for plotting in μm
-    X = np.asarray(X); Y = np.asarray(Y)
-    X_um = _to_um(X); Y_um = _to_um(Y)
+    # ---------------------------
+    # Ensure X,Y are numeric arrays in meters
+    # ---------------------------
+    if _HAS_UNITS and hasattr(X, "unit"):
+        X = X.to_value(units.m)
+    if _HAS_UNITS and hasattr(Y, "unit"):
+        Y = Y.to_value(units.m)
+
+    X = np.asarray(X)
+    Y = np.asarray(Y)
+
+    X_um = _to_um(X)
+    Y_um = _to_um(Y)
     extent = [X_um.min(), X_um.max(), Y_um.min(), Y_um.max()]
 
     # Reference frequency for phase driving
-    omegas = np.array([om for (_,_,om) in comps], dtype=float)
+    omegas = np.array([om for (_, _, om) in comps], dtype=float)
     omega_ref = omegas[0]
-    ratios = omegas / omega_ref  # r_k
+    ratios = omegas / omega_ref
 
-    # Precompute scales for instantaneous snapshots
-    Escale = np.sqrt(eps0)
-    Hscale = np.sqrt(mu0)
-
-    # Convenience: what panels to draw
     showE = "E" in show
     showH = "H" in show
     ncols = int(showE) + int(showH)
     if ncols == 0:
         raise ValueError("Nothing to show: set show=('E',), ('H',) or ('E','H').")
 
-    # Initial snapshot (θ=0)
-    def _sum_snap(theta):
-        # Sum_k F_k * exp(-i r_k theta)
-        Et = 0; Ht = 0
+    # ---------------------------
+    # Summed instantaneous snapshot
+    # ---------------------------
+    def _sum_snap(theta, Escale=1.0, Hscale=1.0):
+        Et = 0.0
+        Ht = 0.0
         for (Ek, Hk, rk) in zip((c[0] for c in comps), (c[1] for c in comps), ratios):
             ph = np.exp(-1j * rk * theta)
             Et = Et + Ek * ph
             Ht = Ht + Hk * ph
 
-        # Real instantaneous fields; split last axis (…, 3) → (Ex, Ey, Ez)
         Ereal = np.real(Et) * Escale
         Hreal = np.real(Ht) * Hscale
 
-        # Safety: ensure vector last axis exists and is length 3
         if Ereal.shape[-1] != 3 or Hreal.shape[-1] != 3:
             raise ValueError("Fields must have last axis of length 3 (Fx,Fy,Fz).")
 
@@ -957,36 +1458,43 @@ def animate_fields_xy(
         Hx, Hy, Hz = Hreal[..., 0], Hreal[..., 1], Hreal[..., 2]
         return (Ex, Ey, Ez), (Hx, Hy, Hz)
 
-    # Initial fields at theta=0
-    (Ex0, Ey0, Ez0), (Hx0, Hy0, Hz0) = _sum_snap(0.0)
+    # First pass: choose robust plot normalization factors
+    (Ex_raw, Ey_raw, Ez_raw), (Hx_raw, Hy_raw, Hz_raw) = _sum_snap(0.0, Escale=1.0, Hscale=1.0)
 
-    # z-scale
+    E0_scale = max(
+        _robust_vec_scale(Ex_raw, Ey_raw, p=robust_p, eps_=eps),
+        _robust_scale(Ez_raw, p=robust_p, eps_=eps),
+    )
+    H0_scale = max(
+        _robust_vec_scale(Hx_raw, Hy_raw, p=robust_p, eps_=eps),
+        _robust_scale(Hz_raw, p=robust_p, eps_=eps),
+    )
+
+    Escale = 1.0 / (E0_scale if E0_scale > eps else 1.0)
+    Hscale = 1.0 / (H0_scale if H0_scale > eps else 1.0)
+
+    # Normalized snapshot for plotting
+    (Ex0, Ey0, Ez0), (Hx0, Hy0, Hz0) = _sum_snap(0.0, Escale=Escale, Hscale=Hscale)
+
+    # Robust color scaling for z components
     if zscale is None:
         zvmax = 0.0
-        if showE: zvmax = max(zvmax, np.max(np.abs(Ez0)))
-        if showH: zvmax = max(zvmax, np.max(np.abs(Hz0)))
-        if zvmax == 0: 
+        if showE:
+            zvmax = max(zvmax, _robust_scale(Ez0, p=robust_p, eps_=eps))
+        if showH:
+            zvmax = max(zvmax, _robust_scale(Hz0, p=robust_p, eps_=eps))
+        if (not np.isfinite(zvmax)) or (zvmax <= eps):
             zvmax = 1.0
     else:
-        zvmax = zscale
+        zvmax = float(zscale)
 
     # Downsample for quiver
-    Np_guess = X.shape[0]
-    stride = max(1, Np_guess // 20)
+    Ny, Nx = X.shape
+    stride = max(1, int(min(Nx, Ny) // max(1, int(quiver_density))))
     Xs = X_um[::stride, ::stride]
     Ys = Y_um[::stride, ::stride]
 
-    # Auto quiver scale from transverse magnitudes (robust to outliers)
-    def _auto_quiver_scale(Fx, Fy):
-        mag = np.sqrt(Fx**2 + Fy**2)
-        finite = mag[np.isfinite(mag)]
-        if finite.size == 0:
-            return 40.0
-        rob = np.percentile(finite, 99)
-        if rob <= 0 or not np.isfinite(rob):
-            return 40.0
-        return 1.0/rob * 20.0
-
+    # Arrow size multiplier
     if (scale == "auto") or (scale is None):
         scale_factor = 1.0
     else:
@@ -995,58 +1503,91 @@ def animate_fields_xy(
         except Exception:
             scale_factor = 1.0
 
-    auto_scale_E = _auto_quiver_scale(Ex0, Ey0)
-    auto_scale_H = _auto_quiver_scale(Hx0, Hy0)
-    qscale_E = auto_scale_E * scale_factor
-    qscale_H = auto_scale_H * scale_factor
+    # Initial downsampled transverse fields
+    Exq0 = Ex0[::stride, ::stride]
+    Eyq0 = Ey0[::stride, ::stride]
+    Hxq0 = Hx0[::stride, ::stride]
+    Hyq0 = Hy0[::stride, ::stride]
 
+    # RMS normalization scales (FIXED across animation; avoids "breathing")
+    sE = 4*_rms_perp_scale(Exq0, Eyq0, eps_=eps)
+    sH = 4*_rms_perp_scale(Hxq0, Hyq0, eps_=eps)
+
+    # Normalized initial quiver components
+    Exn0 = Exq0 / sE
+    Eyn0 = Eyq0 / sE
+    Hxn0 = Hxq0 / sH
+    Hyn0 = Hyq0 / sH
+
+    # Matplotlib quiver: arrow length ~ U / scale
+    qscale_E = quiver_scale / max(scale_factor, eps)
+    qscale_H = quiver_scale / max(scale_factor, eps)
+
+    # ---------------------------
     # Figure and artists
+    # ---------------------------
     fig, axes = plt.subplots(1, ncols, figsize=figsize, sharex=True, sharey=True)
-    if ncols == 1: axes = [axes]
+    if ncols == 1:
+        axes = [axes]
     artists = []
 
     idx = 0
     if showE:
         ax = axes[idx]; idx += 1
-        imE = ax.imshow(Ez0.T, extent=extent, origin='lower', cmap=cmap,
-                        vmin=-zvmax, vmax=zvmax, interpolation='nearest', aspect='equal')
-        qE = ax.quiver(Xs, Ys, Ex0[::stride, ::stride], Ey0[::stride, ::stride],
-               scale=qscale_E, color='k', pivot='middle', linewidth=0.5)
-        ax.set_title(r'Electric field')
+        imE = ax.imshow(
+            Ez0.T, extent=extent, origin="lower", cmap=cmap,
+            vmin=-zvmax, vmax=zvmax, interpolation="nearest", aspect="equal"
+        )
+        qE = ax.quiver(
+            Xs, Ys, Exn0, Eyn0,
+            scale=qscale_E, color="k", pivot="middle", linewidth=0.5
+        )
+        ax.set_title("Electric field")
         artists += [imE, qE]
 
     if showH:
         ax = axes[idx]; idx += 1
-        imH = ax.imshow(Hz0.T, extent=extent, origin='lower', cmap=cmap,
-                        vmin=-zvmax, vmax=zvmax, interpolation='nearest', aspect='equal')
-        qH = ax.quiver(Xs, Ys, Hx0[::stride, ::stride], Hy0[::stride, ::stride],
-               scale=qscale_H, color='k', pivot='middle', linewidth=0.5)
-        ax.set_title(r'Magnetic field')
+        imH = ax.imshow(
+            Hz0.T, extent=extent, origin="lower", cmap=cmap,
+            vmin=-zvmax, vmax=zvmax, interpolation="nearest", aspect="equal"
+        )
+        qH = ax.quiver(
+            Xs, Ys, Hxn0, Hyn0,
+            scale=qscale_H, color="k", pivot="middle", linewidth=0.5
+        )
+        ax.set_title("Magnetic field")
         artists += [imH, qH]
 
     for ax in axes:
         ax.set_xlim(extent[0], extent[1])
         ax.set_ylim(extent[2], extent[3])
-        ax.set_aspect('equal')
-        ax.set_xlabel('$x$ [$\\mu$m]')
-    axes[0].set_ylabel('$y$ [$\\mu$m]')
+        ax.set_aspect("equal")
+        ax.set_xlabel(r"$x$ [$\mu$m]")
+    axes[0].set_ylabel(r"$y$ [$\mu$m]")
     plt.tight_layout()
 
-    # Animation callback stepping θ∈[0,2π)
+    # ---------------------------
+    # Animation update
+    # ---------------------------
     def update(i):
-        theta = 2*np.pi * i / n_frames
-        (Ex, Ey, Ez), (Hx, Hy, Hz) = _sum_snap(theta)
+        theta = 2.0 * np.pi * i / n_frames
+        (Ex, Ey, Ez), (Hx, Hy, Hz) = _sum_snap(theta, Escale=Escale, Hscale=Hscale)
 
         aidx = 0
         if showE:
             artists[aidx].set_data(Ez.T); aidx += 1
-            artists[aidx].set_UVC(Ex[::stride, ::stride], Ey[::stride, ::stride]); aidx += 1
+            Exq = Ex[::stride, ::stride]
+            Eyq = Ey[::stride, ::stride]
+            artists[aidx].set_UVC(Exq / sE, Eyq / sE); aidx += 1
+
         if showH:
             artists[aidx].set_data(Hz.T); aidx += 1
-            artists[aidx].set_UVC(Hx[::stride, ::stride], Hy[::stride, ::stride]); aidx += 1
+            Hxq = Hx[::stride, ::stride]
+            Hyq = Hy[::stride, ::stride]
+            artists[aidx].set_UVC(Hxq / sH, Hyq / sH); aidx += 1
+
         return artists
 
     anim = FuncAnimation(fig, update, frames=n_frames, interval=interval, blit=False)
     plt.close(fig)
     return anim
-

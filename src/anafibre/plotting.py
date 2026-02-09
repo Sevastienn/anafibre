@@ -32,7 +32,7 @@ def plot_dispersion_chart(
     xlabel=True, rasterized=True
 ):
     V_vals = np.linspace(Vmin, Vmax, Npoints)
-    b_vals = np.linspace(0.0, 1.0, Npoints)
+    b_vals = np.linspace(bmin, bmax, Npoints)
     VV, BB = np.meshgrid(V_vals, b_vals)
 
     F_grid = F_dispersion(fibre, ell=ell, b=BB, V=VV, mode_type=mode_type)
@@ -124,8 +124,87 @@ def add_visible_spectrum(ax, position=[0, 0, 1, 0.01], wavelengths=np.linspace(4
     ax2.axis('off')
 
 
+def plot_nu_vs_V(
+    fibre, ell, m, *, Vmin=0.0, Vmax=10.0, Npoints=400, mode_type=None,
+    ax=None, show=('real', 'imag'), title=None
+):
+    """
+    Plot ν(V) for a given (ell, m), following the definition used in fields.py.
+
+    show: tuple containing any of {'real','imag','abs','angle'} to display.
+    Returns the axes.
+    """
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    V = np.linspace(Vmin, Vmax, int(Npoints))
+    nu, mask = fibre.nu_vs_V(ell, m, V, mode_type=mode_type)
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(6, 4))
+    else:
+        fig = ax.figure
+
+    Vv = V[mask]
+    nuv = nu[mask]
+
+    show = tuple(s.lower() for s in show)
+    if 'real' in show:
+        ax.plot(Vv, np.real(nuv), label=r'Re($\nu$)')
+    if 'imag' in show:
+        ax.plot(Vv, np.imag(nuv), '--', label=r'Im($\nu$)')
+    if 'abs' in show:
+        ax.plot(Vv, np.abs(nuv), ':', label=r'|$\nu$|')
+    if 'angle' in show:
+        ax.plot(Vv, np.angle(nuv), '-.', label=r'$\angle \nu$')
+
+    ax.set_xlim(Vmin, Vmax)
+    ax.set_xlabel('V')
+    ax.set_ylabel(r'$\nu$')
+    # if title is None:
+    #     ax.set_title(f"$\nu(V) for \ell={ell}, m={m}{' ('+str(mode_type)+')' if mode_type else ''}$")
+    # else:
+    #     ax.set_title(title)
+    ax.grid(True, linestyle=':', alpha=0.6)
+    ax.legend()
+    plt.tight_layout()
+    return ax
+
+
+def plot_sigma_vs_V(
+    fibre, ell, m, *, Vmin=0.0, Vmax=10.0, Npoints=400, mode_type=None,
+    ax=None, title=None
+):
+    """
+    Plot σ(V) used for modal power normalisation for a given (ell, m).
+    """
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    V = np.linspace(Vmin, Vmax, int(Npoints))
+    sigma, mask = fibre.sigma_vs_V(ell, m, V, mode_type=mode_type)
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(6, 4))
+    else:
+        fig = ax.figure
+
+    ax.plot(V[mask], sigma[mask], label=r"$\sigma(V)$")
+    ax.set_xlim(Vmin, Vmax)
+    ax.set_xlabel('V')
+    ax.set_ylabel(r"$\sigma$ (SI)")
+    # if title is None:
+    #     ax.set_title(f"σ(V) for ℓ={ell}, m={m}{' ('+str(mode_type)+')' if mode_type else ''}")
+    # else:
+    #     ax.set_title(title)
+    ax.grid(True, linestyle=':', alpha=0.6)
+    ax.legend()
+    plt.tight_layout()
+    return ax
+
+
 def plot_xy_vector_field(
-    X, Y, F, ax=None, scale=40, zscale=None, cmap='RdBu_r', stride=4, title=None,
+    X, Y, F, ax=None, scale="auto", zscale=None, cmap='RdBu_r', stride=4, title=None,
     xlabel=None, ylabel=None, colorbar_label=None, colorbar=False,
     density=1.0, linewidth=1, color='k', type='quiver', labels=False
 ):
@@ -133,6 +212,13 @@ def plot_xy_vector_field(
     Plot XY vector field and colormap, showing both inside and outside fibre.
     X, Y : 2D arrays (SI units or astropy Quantity)
     F    : (..., 3) vector field (real or Quantity)
+
+    Parameters
+    ----------
+    scale : {"auto", float}
+        Relative multiplier applied to the automatically determined quiver scale
+        from the transverse field amplitude. Use "auto" or None for factor 1.0;
+        provide a number (e.g., 0.7 or 1.5) to shrink/enlarge arrows w.r.t. autoscale.
     """
     import numpy as np
     import matplotlib.pyplot as plt
@@ -158,6 +244,16 @@ def plot_xy_vector_field(
     Fxv[Fxv == 0] = 0.0
     Fyv[Fyv == 0] = 0.0
 
+    # Compute transverse field amplitude for auto-scaling
+    transverse_mag = np.sqrt(Fxv**2 + Fyv**2)
+    finite_transverse = transverse_mag[np.isfinite(transverse_mag)]
+    # Use robust percentile for scaling to avoid outliers
+    auto_scale = 40
+    if finite_transverse.size > 0:
+        robust_max = np.percentile(finite_transverse, 99)
+        if robust_max > 0:
+            auto_scale = 1.0 / robust_max * 20  # 20 is a visual factor, adjust as needed
+
     if ax is None:
         fig, ax = plt.subplots(figsize=(5, 5))
 
@@ -175,10 +271,19 @@ def plot_xy_vector_field(
 
     if type == 'quiver':
         # Quiver (arrows), subsampled
+        # Treat `scale` as a relative multiplier with respect to `auto_scale`.
+        if (scale == "auto") or (scale is None):
+            scale_factor = 1.0
+        else:
+            try:
+                scale_factor = float(scale)
+            except Exception:
+                scale_factor = 1.0
+        quiver_scale = auto_scale * scale_factor
         ax.quiver(
             Xv[::stride, ::stride], Yv[::stride, ::stride],
             Fxv[::stride, ::stride], Fyv[::stride, ::stride],
-            scale=scale, color='black', pivot='middle', linewidth=0.5, 
+            scale=quiver_scale, color='black', pivot='middle', linewidth=0.5, 
         )
     elif type == 'streamplot':
         # Streamlines
@@ -416,156 +521,308 @@ def plot_complex_field(
     return fig, ax, cb_phase, cb_mag
 
 
+def plot_complex_field_polar(
+    field,
+    Rho,
+    Phi,
+    *,
+    ax=None,
+    variant="dark",                    # "dark" (s=1, v=|F|) or "light" (s=|F|^γ, v=1)
+    gamma=1.0,                         # used only for variant="light"
+    percentile=99.0,                   # robust scaling for |field|
+    vmax=None,                         # override auto scaling if given
+    show_phase_cbar=True,
+    show_mag_cbar=True,
+    phase_cbar_style="wheel",           # "bar", "wheel" (inset), or "edge" (ring around axis)
+    phase_ticks=(-np.pi, -np.pi/2, 0.0, np.pi/2, np.pi),
+    phase_cmap=plt.cm.hsv,
+    mag_cmap="gray",
+    coord_unit=units.um,               # unit for radial coordinate
+    core_radius=None,                  # if provided, set rticks at integer multiples of this
+    title=None,
+    rlabel=None,                       # radial axis label (auto if None)
+    phase_label=r"Phase [rad]",
+    mag_label=r"$|\\,\\mathrm{field}\\,|$",
+    cbar_pad=0.04,
+    cbar_shrink=0.7,
+    cbar_fraction=0.05,               # thickness of colorbars relative to axes
+    show_grid=True,                   # hide grid by default for a cleaner look
+    grid_kwargs=None,                  # customize grid if shown
+    phase_wheel_pos=(1, 1, 0.2, 0.2),  # (x,y,w,h) in axes fraction for wheel (style='wheel')
+    phase_wheel_res=256,               # resolution of the wheel image (style='wheel')
+    phase_edge_width=0.08,             # relative thickness of edge ring (style='edge')
+    phase_edge_gap=0.01,               # small gap from edge (style='edge')
+    phase_edge_theta_N=720,            # angular resolution (style='edge')
+    phase_edge_r_N=2,                  # radial resolution (style='edge')
+    use_tex=False,
+):
+    """
+    Plot a complex scalar field defined on a polar grid using polar coordinates.
 
-# def animate_fields_xy(mode=None, X=None, Y=None, E=None, H=None, *,
-#                       n_radii=2, Np=200,
-#                       scale=40, zscale=None,
-#                       n_frames=60, interval=50,
-#                       figsize=(10, 5), cmap='RdBu_r'):
-#     """
-#     Animate instantaneous E and H fields in XY cross-section.
+    Parameters
+    ----------
+    field : 2D complex array
+        Complex scalar field sampled on (Rho, Phi) grid.
+    Rho, Phi : array-like
+        Polar grid coordinates. Either both (Nr x Nphi) arrays from meshgrid,
+        or 1D arrays with lengths Nr and Nphi respectively. Rho may be an
+        astropy Quantity; Phi may be a Quantity with angle units (converted to rad).
 
-#     Two usage modes:
-#     ----------------
-#     1. Provide E, H, X, Y directly (for superpositions or precomputed fields).
-#     2. Provide a GuidedMode `mode` (and optionally `n_radii`, `Np`);
-#        the grid is generated automatically.
+    Returns: (fig, ax, cb_phase, cb_mag)
+    """
+    # LaTeX / mathtext setup
+    if use_tex:
+        mpl.rcParams["text.usetex"] = True
+        mpl.rcParams.update({"font.family": "serif"})
+        mpl.rcParams["axes.formatter.use_mathtext"] = True
+    else:
+        mpl.rcParams["text.usetex"] = False
+        mpl.rcParams["axes.formatter.use_mathtext"] = True
 
-#     Parameters
-#     ----------
-#     mode : GuidedMode, optional
-#         Guided mode to animate. If given, X/Y/E/H can be omitted.
-#     X, Y : 2D arrays, optional
-#         Grid (with or without astropy units). Required if E,H are given directly.
-#     E, H : 3D arrays, optional
-#         Complex phasor fields (...,3). Required if not using `mode`.
-#     n_radii : float, optional
-#         Grid half-size in units of fibre core radius (default 2).
-#     Np : int, optional
-#         Grid resolution per axis (default 200).
-#     scale : float, optional
-#         Scaling for quiver arrows.
-#     zscale : float, optional
-#         Colormap scale for Ez/Hz. Auto if None.
-#     n_frames : int, optional
-#         Number of animation frames per oscillation cycle.
-#     interval : int, optional
-#         Delay between frames in ms.
-#     figsize : tuple, optional
-#         Figure size.
-#     cmap : str, optional
-#         Colormap for Ez/Hz.
+    # Convert inputs and compute HSV mapping (phase→hue, magnitude→value/saturation)
+    F = np.asarray(field)
+    mag = np.abs(F).astype(float)
+    phase = np.angle(F)
 
-#     Returns
-#     -------
-#     anim : matplotlib.animation.FuncAnimation
-#         Animation object. Use `anim.to_jshtml()` in Jupyter or `anim.save("out.mp4")`.
-#     """
+    finite_mag = mag[np.isfinite(mag)]
+    auto_vmax = np.percentile(finite_mag, percentile) if finite_mag.size else 1.0
+    vmax_eff = (
+        float(vmax) if (vmax is not None and np.isfinite(vmax) and vmax > 0)
+        else (float(auto_vmax) if np.isfinite(auto_vmax) and auto_vmax > 0 else 1.0)
+    )
+    val = np.clip(mag / vmax_eff, 0.0, 1.0)
 
-#     import matplotlib.pyplot as plt
-#     from matplotlib.animation import FuncAnimation
-#     from scipy.constants import epsilon_0 as eps0, mu_0 as mu0, c as c0
+    hue = np.mod(phase / (2*np.pi), 1.0)
+    if str(variant).lower() == "light":
+        s = val**float(gamma)
+        v = np.ones_like(val)
+    else:
+        s = np.ones_like(val)
+        v = val
 
-#     # --------------------
-#     # Case 2: build grid + fields from mode
-#     # --------------------
-#     if mode is not None and (E is None or H is None):
-#         # Generate grid
-#         a = mode.fibre.core_radius
-#         L = (n_radii * a )
-#         x = np.linspace(-L, L, Np)
-#         y = np.linspace(-L, L, Np)
-#         X, Y = np.meshgrid(x, y)
+    rgb = hsv_to_rgb(np.stack([hue, s, v], axis=-1))  # shape (Nr, Nphi, 3)
 
-#         # Compute fields
-#         E = mode.E(x=X, y=Y)
-#         H = mode.H(x=X, y=Y)
-#         X, Y = X*units.m, Y*units.m
+    # Handle NaNs by making them transparent
+    alpha = np.where(np.isfinite(mag), 1.0, 0.0)
+    if rgb.shape[:2] != alpha.shape:
+        alpha = np.ones(rgb.shape[:2])
+    rgba = np.dstack([rgb, alpha])  # (Nr, Nphi, 4)
 
-#     # --------------------
-#     # Case 1: all provided directly
-#     # --------------------
-#     if E is None or H is None or X is None or Y is None:
-#         raise ValueError("Provide either (mode) OR (E, H, X, Y).")
+    # Axes creation
+    created_fig = False
+    if ax is None:
+        fig, ax = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(5, 5), constrained_layout=False)
+        created_fig = True
+    else:
+        fig = ax.figure
 
-#     # Frequency (only needed for title)
-#     omega = None
-#     if mode is not None:
-#         omega = 2*np.pi * c0 / mode.wavelength.to_value(units.m)
+    # Coordinates: convert Rho to coord_unit, Phi to radians
+    Rv, runit = _values_and_unit(Rho, coord_unit)
+    Pv, _ = _values_and_unit(Phi, units.rad)
 
-#     # Grid size
-#     Np = X.shape[0]
-#     stride = max(1, Np // 20)
+    # Ensure 2D grid shapes and facecolors averaged to cell colors (M-1, N-1, 4)
+    def _as_2d(a):
+        a = np.asarray(a)
+        if a.ndim == 1:
+            return a
+        return a
 
-#     # Downsampled grid for quiver
-#     Xs = X[::stride, ::stride]
-#     Ys = Y[::stride, ::stride]
-#     if hasattr(Xs, "unit"):
-#         Xs = Xs.to_value(units.um)
-#         Ys = Ys.to_value(units.um)
+    R_arr = _as_2d(Rv)
+    P_arr = _as_2d(Pv)
 
-#     # Convert full grids for imshow extents
-#     Xv = X.to_value(units.um) if hasattr(X, "unit") else X
-#     Yv = Y.to_value(units.um) if hasattr(Y, "unit") else Y
-#     extent = [Xv.min(), Xv.max(), Yv.min(), Yv.max()]
+    # Determine grid shape
+    if R_arr.ndim == 2 and P_arr.ndim == 2:
+        Nr, Np_ = R_arr.shape
+        if rgba.shape[0] != Nr or rgba.shape[1] != Np_:
+            raise ValueError("field shape must match Rho/Phi grid shape.")
+        # Average to cell colors
+        if Nr > 1 and Np_ > 1:
+            fc = 0.25*(rgba[:-1, :-1, :] + rgba[1:, :-1, :] + rgba[:-1, 1:, :] + rgba[1:, 1:, :])
+        else:
+            fc = rgba
+        # Create a dummy C to satisfy pcolormesh API, then set facecolors explicitly
+        qm = ax.pcolormesh(
+            P_arr, R_arr, np.zeros((max(Nr-1,1), max(Np_-1,1))),
+            shading='flat', antialiased=False, edgecolors='none'
+        )
+        # Detach scalar array so our facecolors are respected
+        qm.set_array(None)
+        qm.set_cmap(None)
+        qm.set_facecolors(fc.reshape(-1, fc.shape[-1]))
+        # Rasterize heavy quadmesh to accelerate vector exports
+        try:
+            qm.set_rasterized(True)
+        except Exception:
+            pass
+    else:
+        # Assume 1D vectors for radii and angles
+        r = np.asarray(Rv).ravel()
+        p = np.asarray(Pv).ravel()
+        Nr = r.size; Np_ = p.size
+        if rgba.shape[0] != Nr or rgba.shape[1] != Np_:
+            raise ValueError("For 1D Rho/Phi, field must have shape (len(Rho), len(Phi)).")
+        if Nr > 1 and Np_ > 1:
+            fc = 0.25*(rgba[:-1, :-1, :] + rgba[1:, :-1, :] + rgba[:-1, 1:, :] + rgba[1:, 1:, :])
+            qm = ax.pcolormesh(p, r, np.zeros((Nr-1, Np_-1)), shading='flat', antialiased=False, edgecolors='none')
+            qm.set_array(None)
+            qm.set_cmap(None)
+            qm.set_facecolors(fc.reshape(-1, fc.shape[-1]))
+            # Rasterize the heavy quadmesh for faster vector export
+            try:
+                qm.set_rasterized(True)
+            except Exception:
+                pass
+        else:
+            # Fallback: single cell
+            qm = ax.pcolormesh(p, r, np.zeros((1, 1)), shading='flat', antialiased=False, edgecolors='none')
+            qm.set_array(None)
+            qm.set_cmap(None)
+            qm.set_facecolors(rgba.reshape(-1, rgba.shape[-1]))
+            try:
+                qm.set_rasterized(True)
+            except Exception:
+                pass
 
-#     # Snapshot helper
-#     def snapshot(F, theta, scale_factor=1.0):
-#         Fθ = np.real(F * np.exp(-1j*theta)) * scale_factor
-#         return Fθ[...,0], Fθ[...,1], Fθ[...,2]
+    # Labels and title
+    if rlabel is None:
+        rlabel = _axis_label_from_unit("r", runit)
+    # ax.set_ylabel(rlabel)
+    if title:
+        ax.set_title(title)
+    rmax = float(np.nanmax(Rv))
+    ax.set_ylim(0, rmax)
 
-#     Escale = np.sqrt(eps0)
-#     Hscale = np.sqrt(mu0)
+    # Radial ticks at k·a if core_radius is provided (in coord_unit)
+    if core_radius is not None:
+        try:
+            a_vals, _ = _values_and_unit(core_radius, coord_unit)
+            a = float(np.asarray(a_vals).squeeze())
+            if np.isfinite(a) and a > 0:
+                kmax = int(np.floor(rmax / a))
+                if kmax >= 1:
+                    ticks = a * np.arange(1, kmax + 1)
+                    ax.set_rticks(ticks)
 
-#     Ex0, Ey0, Ez0 = snapshot(E, 0.0, Escale)
-#     Hx0, Hy0, Hz0 = snapshot(H, 0.0, Hscale)
+        except Exception:
+            # ignore conversion errors and keep default ticks
+            pass
 
-#     # Auto zscale
-#     if zscale is None:
-#         zvmax = max(np.max(np.abs(Ez0)), np.max(np.abs(Hz0)))
-#     else:
-#         zvmax = zscale
+    # Grid control
+    if show_grid:
+        gk = {"linestyle": ":", "linewidth": 1.0, "alpha": 0.4, "color": "white"}
+        if grid_kwargs:
+            gk.update(grid_kwargs)
+        ax.grid(True, **gk)
+    else:
+        ax.grid(False)
 
-#     # Build figure
-#     fig, (axE, axH) = plt.subplots(1, 2, figsize=figsize, sharex=True, sharey=True)
-#     imE = axE.imshow(Ez0.T, extent=extent, origin='lower', cmap=cmap,
-#                      vmin=-zvmax, vmax=zvmax, interpolation='nearest', aspect='equal')
-#     imH = axH.imshow(Hz0.T, extent=extent, origin='lower', cmap=cmap,
-#                      vmin=-zvmax, vmax=zvmax, interpolation='nearest', aspect='equal')
+    # Hide radial tick labels (keep ticks and gridlines)
+    try:
+        ax.set_yticklabels([])
+        for lab in ax.yaxis.get_ticklabels():
+            lab.set_visible(False)
+        # Also hide any offset text if present
+        ax.yaxis.get_offset_text().set_visible(False)
+    except Exception:
+        pass
 
-#     qE = axE.quiver(Xs, Ys, Ex0[::stride, ::stride], Ey0[::stride, ::stride],
-#                     scale=scale, color='k', pivot='middle', linewidth=0.5)
-#     qH = axH.quiver(Xs, Ys, Hx0[::stride, ::stride], Hy0[::stride, ::stride],
-#                     scale=scale, color='k', pivot='middle', linewidth=0.5)
+    # Colorbars (separate mappables)
+    cb_phase = cb_mag = None
+    if show_phase_cbar:
+        style = str(phase_cbar_style).lower()
+        if style == "wheel":
+            # Draw a circular HSV phase wheel as an inset
+            x0, y0, w, h = phase_wheel_pos
+            axw = ax.inset_axes([x0, y0, w, h], transform=ax.transAxes)
+            N = int(phase_wheel_res)
+            yy, xx = np.ogrid[-1:1:N*1j, -1:1:N*1j]
+            rr = np.sqrt(xx*xx + yy*yy)
+            ang = np.arctan2(yy, xx)
+            hue_w = np.mod(ang / (2*np.pi), 1.0)
+            s_w = np.ones_like(hue_w)
+            v_w = np.ones_like(hue_w)
+            rgb_w = hsv_to_rgb(np.stack([hue_w, s_w, v_w], axis=-1))
+            alpha_w = ((.5 <= rr) & (rr <= 0.9)).astype(float)
+            rgba_w = np.dstack([rgb_w, alpha_w])
+            axw.imshow(rgba_w, origin='lower', extent=[-1, 1, -1, 1])
+            axw.set_xticks([]); axw.set_yticks([])
+            axw.set_aspect('equal'); 
+            # axw.set_title(phase_label, fontsize=9, pad=2)
+            #hide axis
+            axw.axis('off')
+            # Keep cb_phase as None for wheel style
+            cb_phase = None
+        elif style == "edge":
+            # Draw a thin HSV ring hugging the outer edge of the polar axis
+            axw = ax.inset_axes([0, 0, 1, 1], transform=ax.transAxes, projection='polar', zorder=9)
+            axw.set_facecolor('none')
+            axw.set_frame_on(False)
+            axw.grid(False)
+            axw.set_clip_on(False)
+            # Match orientation with main axis if possible
+            try:
+                direction = ax.get_theta_direction()
+                axw.set_theta_direction(direction)
+            except Exception:
+                pass
+            try:
+                zero = ax.get_theta_zero_location()
+                axw.set_theta_zero_location(zero)
+            except Exception:
+                try:
+                    axw.set_theta_zero_location('E')
+                except Exception:
+                    pass
+            # Normalized ring coordinates
+            w = float(np.clip(phase_edge_width, 1e-3, 0.5))
+            gap = float(np.clip(phase_edge_gap, 0.0, 0.2))
+            r0 = max(0.0, 1.0 - gap - w)
+            r1 = max(r0 + 1e-3, 1.0 - gap)
+            # Use 2D mesh with Gouraud shading for smooth angular gradients
+            Nt = int(max(72, phase_edge_theta_N)) + 1  # +1 to close the seam at ±π
+            theta = np.linspace(-np.pi, np.pi, Nt)
+            r = np.array([r0, r1])  # just two radial samples define a ring strip
+            TT, RR = np.meshgrid(theta, r, indexing='xy')  # shapes (2, Nt)
+            # Color by phase (theta) using a cyclic HSV colormap
+            phase_norm = Normalize(vmin=-np.pi, vmax=np.pi)
+            cmap_phase = _rolled_cmap(phase_cmap, shift=-0.5)
+            pc = axw.pcolormesh(
+                TT, RR, TT,  # C same shape as coordinates for Gouraud
+                shading='gouraud', cmap=cmap_phase, norm=phase_norm,
+                edgecolors='none', antialiased=True
+            )
+            try:
+                pc.set_rasterized(True)
+            except Exception:
+                pass
+            axw.set_rlim(0.0, 1.0)
+            axw.set_rticks([])
+            axw.set_thetagrids([])
+            cb_phase = None
+        else:
+            phase_norm = Normalize(vmin=-np.pi, vmax=np.pi)
+            cmap_phase = _rolled_cmap(phase_cmap, shift=-0.5)
+            sm_phase = plt.cm.ScalarMappable(norm=phase_norm, cmap=cmap_phase)
+            sm_phase.set_array([])
+            cb_phase = fig.colorbar(sm_phase, ax=ax, pad=cbar_pad, shrink=cbar_shrink, fraction=cbar_fraction)
+            cb_phase.set_label(phase_label)
+            cb_phase.set_ticks(list(phase_ticks))
+            if tuple(phase_ticks) == (-np.pi, -np.pi/2, 0.0, np.pi/2, np.pi):
+                cb_phase.set_ticklabels([r"$-\pi$", r"$-\frac{\pi}{2}$", r"$0$", r"$\frac{\pi}{2}$", r"$\pi$"])
 
-#     for ax, title in zip((axE, axH),
-#                          (r'Electric field  $\Re\{\mathbf{E}e^{-i\omega t}\}$',
-#                           r'Magnetic field  $\Re\{\mathbf{H}e^{-i\omega t}\}$')):
-#         ax.set_xlim(extent[0], extent[1])
-#         ax.set_ylim(extent[2], extent[3])
-#         ax.set_aspect('equal')
-#         ax.set_xlabel('x [$\mu$m]')
-#         ax.set_title(title)
-#     axE.set_ylabel('y [$\mu$m]')
-#     # plt.tight_layout()
+    if show_mag_cbar:
+        mag_norm = Normalize(vmin=0.0, vmax=vmax_eff)
+        sm_mag = plt.cm.ScalarMappable(norm=mag_norm, cmap=mag_cmap)
+        sm_mag.set_array([])
+        cb_mag = fig.colorbar(sm_mag, ax=ax, pad=cbar_pad + 0.02, shrink=cbar_shrink, fraction=cbar_fraction)
+        cb_mag.set_label(mag_label)
+        cb_mag.formatter.set_powerlimits((0, 0))
+        cb_mag.update_ticks()
 
-#     # Animation callback
-#     def update(i):
-#         theta = 2*np.pi * i / n_frames
-#         Ex, Ey, Ez = snapshot(E, theta, Escale)
-#         Hx, Hy, Hz = snapshot(H, theta, Hscale)
+    if created_fig:
+        plt.show()
 
-#         imE.set_data(Ez.T)
-#         imH.set_data(Hz.T)
-
-#         qE.set_UVC(Ex[::stride, ::stride], Ey[::stride, ::stride])
-#         qH.set_UVC(Hx[::stride, ::stride], Hy[::stride, ::stride])
-
-#         return imE, imH, qE, qH
-
-#     anim = FuncAnimation(fig, update, frames=n_frames, interval=interval, blit=False)
-#     plt.close(fig)
-#     return anim
+    return fig, ax, cb_phase, cb_mag
 
 
 def animate_fields_xy(
@@ -582,7 +839,7 @@ def animate_fields_xy(
 
     # --- Plot controls ---
     show=("E","H"),        # any subset of {"E","H"}; e.g. ("E",) to animate only E
-    scale=40,              # quiver scale
+    scale="auto",          # relative multiplier for auto quiver scale ("auto" -> 1.0)
     zscale=None,           # color scale for Ez/Hz (auto if None)
     cmap='RdBu_r',
     n_frames=60,           # frames over θ∈[0,2π)
@@ -602,6 +859,14 @@ def animate_fields_xy(
           anim = animate_fields_xy(fields=fields, X=X, Y=Y)
 
     Returns: matplotlib.animation.FuncAnimation
+
+    Parameters
+    ----------
+    scale : {"auto", float}
+        Relative multiplier applied to the automatically determined quiver scale
+        from the transverse field amplitude in each panel (E and/or H). Use
+        "auto" or None for factor 1.0; provide a number (e.g., 0.7 or 1.5)
+        to shrink/enlarge arrows with respect to autoscale.
     """
     from matplotlib.animation import FuncAnimation
     from scipy.constants import epsilon_0 as eps0, mu_0 as mu0, c as c0
@@ -711,6 +976,30 @@ def animate_fields_xy(
     Xs = X_um[::stride, ::stride]
     Ys = Y_um[::stride, ::stride]
 
+    # Auto quiver scale from transverse magnitudes (robust to outliers)
+    def _auto_quiver_scale(Fx, Fy):
+        mag = np.sqrt(Fx**2 + Fy**2)
+        finite = mag[np.isfinite(mag)]
+        if finite.size == 0:
+            return 40.0
+        rob = np.percentile(finite, 99)
+        if rob <= 0 or not np.isfinite(rob):
+            return 40.0
+        return 1.0/rob * 20.0
+
+    if (scale == "auto") or (scale is None):
+        scale_factor = 1.0
+    else:
+        try:
+            scale_factor = float(scale)
+        except Exception:
+            scale_factor = 1.0
+
+    auto_scale_E = _auto_quiver_scale(Ex0, Ey0)
+    auto_scale_H = _auto_quiver_scale(Hx0, Hy0)
+    qscale_E = auto_scale_E * scale_factor
+    qscale_H = auto_scale_H * scale_factor
+
     # Figure and artists
     fig, axes = plt.subplots(1, ncols, figsize=figsize, sharex=True, sharey=True)
     if ncols == 1: axes = [axes]
@@ -722,7 +1011,7 @@ def animate_fields_xy(
         imE = ax.imshow(Ez0.T, extent=extent, origin='lower', cmap=cmap,
                         vmin=-zvmax, vmax=zvmax, interpolation='nearest', aspect='equal')
         qE = ax.quiver(Xs, Ys, Ex0[::stride, ::stride], Ey0[::stride, ::stride],
-                       scale=scale, color='k', pivot='middle', linewidth=0.5)
+               scale=qscale_E, color='k', pivot='middle', linewidth=0.5)
         ax.set_title(r'Electric field')
         artists += [imE, qE]
 
@@ -731,7 +1020,7 @@ def animate_fields_xy(
         imH = ax.imshow(Hz0.T, extent=extent, origin='lower', cmap=cmap,
                         vmin=-zvmax, vmax=zvmax, interpolation='nearest', aspect='equal')
         qH = ax.quiver(Xs, Ys, Hx0[::stride, ::stride], Hy0[::stride, ::stride],
-                       scale=scale, color='k', pivot='middle', linewidth=0.5)
+               scale=qscale_H, color='k', pivot='middle', linewidth=0.5)
         ax.set_title(r'Magnetic field')
         artists += [imH, qH]
 
@@ -760,3 +1049,4 @@ def animate_fields_xy(
     anim = FuncAnimation(fig, update, frames=n_frames, interval=interval, blit=False)
     plt.close(fig)
     return anim
+

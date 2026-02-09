@@ -165,3 +165,7 @@ htmlcov/
 *.egg-info/
 dist/
 build/
+
+# Jupyter Notebook outputs
+notebooks/*.pdf
+notebooks/*.gif

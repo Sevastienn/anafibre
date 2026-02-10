@@ -44,8 +44,6 @@ class RefractiveIndexMaterial:
             self.rangeMin += 0.1
         if np.isnan(self.get_eps(self.rangeMax*1e-6)):
             self.rangeMax -= 0.1
-        # print(self.rangeMax, self.rangeMin)
-        # print(self.get_eps(self.rangeMin*1e-6), self.get_eps(self.rangeMax*1e-6))
 
     def get_refractive_index(self, wl):
         return self.material.getRefractiveIndex(np.copy(wl), bounds_error=False)
@@ -504,7 +502,7 @@ class StepIndexFibre:
             denAB = (np.abs(A)**2 + np.abs(B)**2)
             alpha1_plus = (eps1 * np.abs(A)**2 + mu1 * np.abs(B)**2) / denAB
             alpha2_plus = (eps2 * np.abs(A)**2 + mu2 * np.abs(B)**2) / denAB
-            alpha_minus  = (2.0 * np.imag(A * np.conj(B))) / denAB
+            alpha_minus  = (np.imag(A * np.conj(B))) / denAB
 
             kappasq1 = k1**2 - kz**2
             gammasq2 = kz**2 - k2**2

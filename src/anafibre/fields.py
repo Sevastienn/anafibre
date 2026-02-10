@@ -27,7 +27,7 @@ import numpy as np
 from scipy.special import jv, kv, jvp, kve
 from scipy.constants import epsilon_0 as eps0, mu_0 as mu0, c as c0
 from .utils import units, _HAS_UNITS, _strip_unit
-from .dispersion import b_to_neff, b_to_kz
+from .dispersion import b_to_neff, b_to_kz, _wDlnK
 import warnings
 
 
@@ -85,7 +85,8 @@ class GuidedMode:
         self.fibre = fibre
         self.ell = ell
         self.m = m
-        self.wavelength = wavelength
+        self.wavelength = _strip_unit(wavelength, units.m if _HAS_UNITS else None)
+        # self.wavelength = wavelength
         self.mode_type = mode_type
 
         # Optional superposition coefficients for ℓ≠0 (degenerate ±|ℓ| pair)
@@ -200,7 +201,6 @@ class GuidedMode:
         I1_plus = 1/2 - ell**2 / (2 * u**2) + DlnJ / u + DlnJ**2 / 2
         I1_minus = ell / (u**2)
 
-        # DlnK = -(kve(ell - 1, w) + kve(ell+1, w))/(2*kve(ell, w))
         DlnK = _wDlnK(ell, w)/w
         I2_plus = 1/2 + ell**2 / (2 * w**2) - DlnK / w - DlnK**2 / 2
         I2_minus = -ell / (w**2)
@@ -385,7 +385,7 @@ class GuidedMode:
         Fm = self.a_plus * Fm_plus + self.a_minus * Fm_minus
 
         return spin_to_cartesian(F0, Fp, Fm).reshape(*shape, 3)
-
+    
     def H(self, rho=None, phi=None, z=0, *, x=None, y=None, Normalise=False):
         (rho_f, phi_f, z_f, shape, phi_phase, s_phase, z_phase, R0, Rp, Rm) = self._prepare_grid(
             rho=rho, phi=phi, z=z, x=x, y=y
@@ -402,6 +402,186 @@ class GuidedMode:
         Fm = self.a_plus * Fm_plus + self.a_minus * Fm_minus
 
         return spin_to_cartesian(F0, Fp, Fm).reshape(*shape, 3)
+    
+    def We(self, rho=None, phi=None, z=0, *, x=None, y=None):
+        E = self.E(rho=rho, phi=phi, z=z, x=x, y=y)
+        We = 0.25 * np.real(self.eps(rho)*eps0 * np.sum(E * np.conj(E), axis=-1))
+        return We
+    def Wm(self, rho=None, phi=None, z=0, *, x=None, y=None):
+        H = self.H(rho=rho, phi=phi, z=z, x=x, y=y)
+        Wm = 0.25 * np.real(self.mu(rho) * mu0 * np.sum(H * np.conj(H), axis=-1))
+        return Wm
+    def W0(self, rho=None, phi=None, z=0, *, x=None, y=None):
+        return self.We(rho=rho, phi=phi, z=z, x=x, y=y) + self.Wm(rho=rho, phi=phi, z=z, x=x, y=y)
+    def W1(self, rho=None, phi=None, z=0, *, x=None, y=None):
+        return self.We(rho=rho, phi=phi, z=z, x=x, y=y) - self.Wm(rho=rho, phi=phi, z=z, x=x, y=y)
+    def W2(self, rho=None, phi=None, z=0, *, x=None, y=None):
+        E = self.E(rho=rho, phi=phi, z=z, x=x, y=y)
+        H = self.H(rho=rho, phi=phi, z=z, x=x, y=y)
+        W2 = -0.5 * np.real(np.sqrt(self.eps(rho) * eps0 * self.mu(rho) * mu0) * np.sum(H * np.conj(E), axis=-1))
+        return W2
+    def W3(self, rho=None, phi=None, z=0, *, x=None, y=None):
+        E = self.E(rho=rho, phi=phi, z=z, x=x, y=y)
+        H = self.H(rho=rho, phi=phi, z=z, x=x, y=y)
+        W3 = -0.5 * np.imag(np.sqrt(self.eps(rho) * eps0 * self.mu(rho) * mu0) * np.sum(H * np.conj(E), axis=-1))
+        return W3
+    
+    def _radial_log_derivative(self, s, ell, rho):
+        """
+        d/dρ ln R_s(ρ) consistent with _radial_function(s, ρ).
+
+        IMPORTANT: rho may be complex dtype due to caching trick (R0*0 + rho).
+        We use rho_r = real(rho) for masks and geometry.
+        """
+        rho_r = np.asarray(np.real(rho), dtype=float)
+
+        rho0 = self.fibre.core_radius
+        k1 = self.k0 * self.fibre.n_core(self.wavelength)
+        k2 = self.k0 * self.fibre.n_clad(self.wavelength)
+        kz = self.kz
+
+        if np.iscomplex(kz):
+            kap1 = np.sqrt(k1**2 - kz**2 + 0j)
+            gam2 = np.sqrt(kz**2 - k2**2 + 0j)
+        else:
+            kap1 = np.sqrt(k1**2 - kz**2)
+            gam2 = np.sqrt(kz**2 - k2**2)
+
+        nu = ell - s
+        inside = rho_r < rho0
+
+        out = np.empty_like(rho_r, dtype=complex)
+
+        # Core: R = J_{nu}(kap1 ρ) / J_{ell}(kap1 ρ0) -> d ln R / dρ = kap1 * J' / J
+        if np.any(inside):
+            x = kap1 * rho_r[inside]
+            with np.errstate(divide="ignore", invalid="ignore", over="ignore", under="ignore"):
+                out[inside] = kap1 * (jvp(nu, x) / jv(nu, x))
+
+        # Cladding: R = (1j)^s K_{nu}(gam2 ρ) / K_{ell}(gam2 ρ0) -> d ln R / dρ = gam2 * K' / K
+        # Use stable weighted derivative: _wDlnK(nu, x) = x K'/K -> K'/K = _wDlnK/x
+        if np.any(~inside):
+            x = gam2 * rho_r[~inside]
+            with np.errstate(divide="ignore", invalid="ignore", over="ignore", under="ignore"):
+                out[~inside] = gam2 * (_wDlnK(nu, x) / x)
+
+        return out
+
+    def gradE(self, rho=None, phi=None, z=0, *, x=None, y=None, coord="cartesian"):
+        return self._grad_field("E", rho=rho, phi=phi, z=z, x=x, y=y, coord=coord)
+
+    def gradH(self, rho=None, phi=None, z=0, *, x=None, y=None, coord="cartesian"):
+        return self._grad_field("H", rho=rho, phi=phi, z=z, x=x, y=y, coord=coord)
+
+    def _grad_field(self, which, rho=None, phi=None, z=0, *, x=None, y=None, coord="cartesian"):
+        """
+        Analytical Jacobian for E or H.
+
+        Returns J[..., i, j] = ∂_j F_i in Cartesian components i=(x,y,z).
+        If coord='cylindrical', columns are (∂/∂ρ, (1/ρ)∂/∂φ, ∂/∂z).
+        """
+        which = str(which).upper()
+        if which not in ("E", "H"):
+            raise ValueError("which must be 'E' or 'H'.")
+
+        (rho_f, phi_f, z_f, shape, phi_phase, s_phase, z_phase, R0, Rp, Rm) = self._prepare_grid(
+            rho=rho, phi=phi, z=z, x=x, y=y
+        )
+
+        # rho_f is complex dtype (cache trick). Use real for geometry.
+        rho_r = np.asarray(np.real(rho_f), dtype=float)
+        phi_r = np.asarray(np.real(phi_f), dtype=float)
+
+        # Spin coefficients (exactly as your E/H do)
+        F0c, c_plus, c_minus, phi_phase, s_phase, z_phase = self._spin_components(
+            which, rho_f, phi_f, z_f, phi_phase, s_phase, z_phase
+        )
+
+        # Build branch-resolved spin fields exactly like E()/H()
+        # "+" branch
+        F0_plus = F0c * R0 * phi_phase * z_phase
+        Fp_plus = c_plus  * Rp * np.conj(s_phase) * phi_phase * z_phase     # exp(i(ℓ-1)φ)
+        Fm_plus = c_minus * Rm * s_phase          * phi_phase * z_phase     # exp(i(ℓ+1)φ)
+
+        # "-" branch (differs by sign between E and H exactly as in your code)
+        if which == "E":
+            F0_minus =  F0c    * R0 * np.conj(phi_phase) * z_phase
+            Fp_minus =  c_minus * Rm * np.conj(s_phase) * np.conj(phi_phase) * z_phase  # exp(-i(ℓ+1)φ)
+            Fm_minus =  c_plus  * Rp * s_phase          * np.conj(phi_phase) * z_phase  # exp(-i(ℓ-1)φ)
+        else:
+            F0_minus = -F0c    * R0 * np.conj(phi_phase) * z_phase
+            Fp_minus = -c_minus * Rm * np.conj(s_phase) * np.conj(phi_phase) * z_phase
+            Fm_minus = -c_plus  * Rp * s_phase          * np.conj(phi_phase) * z_phase
+
+        # Superpose polarisation coefficients
+        F0 = self.a_plus * F0_plus + self.a_minus * F0_minus
+        Fp = self.a_plus * Fp_plus + self.a_minus * Fp_minus
+        Fm = self.a_plus * Fm_plus + self.a_minus * Fm_minus
+
+        # --- ρ-derivatives: only radial functions depend on ρ (within each region) ---
+        dlnR0p = self._radial_log_derivative(0, self.ell, rho_f)
+        dlnRpp = self._radial_log_derivative(+1, self.ell, rho_f)
+        dlnRmp = self._radial_log_derivative(-1, self.ell, rho_f)
+        dlnR0l = self._radial_log_derivative(0, -self.ell, rho_f)
+        dlnRpl = self._radial_log_derivative(+1, -self.ell, rho_f)
+        dlnRml = self._radial_log_derivative(-1, -self.ell, rho_f)
+
+        dρF0 = self.a_plus * dlnR0p * F0_plus + self.a_minus * dlnR0l * F0_minus
+        dρFp = self.a_plus * dlnRpp * Fp_plus + self.a_minus * dlnRpl * Fp_minus
+        dρFm = self.a_plus * dlnRmp * Fm_plus + self.a_minus * dlnRml * Fm_minus
+
+        # --- φ-derivatives: MUST be branch-wise with correct exponents ---
+        ell = self.ell
+
+        # plus branch exponents:
+        # F0_plus ~ exp(+i ell φ)
+        # Fp_plus ~ exp(+i(ell-1)φ)
+        # Fm_plus ~ exp(+i(ell+1)φ)
+        # minus branch exponents:
+        # F0_minus ~ exp(-i ell φ)
+        # Fp_minus ~ exp(-i(ell+1)φ)
+        # Fm_minus ~ exp(-i(ell-1)φ)
+        dφF0 = 1j * ( self.a_plus * (+ell)       * F0_plus + self.a_minus * (-ell)        * F0_minus )
+        dφFp = 1j * ( self.a_plus * (ell - 1)    * Fp_plus + self.a_minus * (-(ell + 1))  * Fp_minus )
+        dφFm = 1j * ( self.a_plus * (ell + 1)    * Fm_plus + self.a_minus * (-(ell - 1))  * Fm_minus )
+
+        # --- z-derivatives ---
+        dz_fac = 1j * self.kz
+        dzF0 = dz_fac * F0
+        dzFp = dz_fac * Fp
+        dzFm = dz_fac * Fm
+
+        # Convert spin partials -> Cartesian partial vectors
+        dρ_cart = spin_to_cartesian(dρF0, dρFp, dρFm)   # (N,3)
+        dφ_cart = spin_to_cartesian(dφF0, dφFp, dφFm)
+        dz_cart = spin_to_cartesian(dzF0, dzFp, dzFm)
+
+        coord = str(coord).lower()
+        if coord.startswith("cyl"):
+            invρ = np.zeros_like(rho_r, dtype=float)
+            m = rho_r > 0
+            invρ[m] = 1.0 / rho_r[m]
+            # columns = (∂/∂ρ, (1/ρ)∂/∂φ, ∂/∂z)
+            J = np.stack([dρ_cart, invρ[:, None] * dφ_cart, dz_cart], axis=-1)
+            return J.reshape(*shape, 3, 3)
+
+        # Cartesian chain rule:
+        # ∂x = cosφ ∂ρ - (sinφ/ρ) ∂φ
+        # ∂y = sinφ ∂ρ + (cosφ/ρ) ∂φ
+        c = np.cos(phi_r)
+        s = np.sin(phi_r)
+
+        invρ = np.zeros_like(rho_r, dtype=float)
+        m = rho_r > 0
+        invρ[m] = 1.0 / rho_r[m]
+
+        dX = c[:, None] * dρ_cart - (s * invρ)[:, None] * dφ_cart
+        dY = s[:, None] * dρ_cart + (c * invρ)[:, None] * dφ_cart
+        dZ = dz_cart
+
+        J = np.stack([dX, dY, dZ], axis=-1)
+        return J.reshape(*shape, 3, 3)
+
 
     def Power(self, rho=None, phi=None, z=0, *, x=None, y=None,
             auto=None, extent_factor=8.0, N=1000, tol=1e-3, max_iter=8,
@@ -529,6 +709,9 @@ class GuidedMode:
 
         return P
 
+    
+
+
     def __repr__(self):
         return (
             f"<GuidedMode ℓ={self.ell}, m={self.m}, "
@@ -578,7 +761,7 @@ class GuidedMode:
         try:
             wl_nm = self.wavelength.to_value('nm') if _HAS_UNITS else float(self.wavelength) * 1e9
         except Exception:
-            wl_nm = None
+            wl_nm = float(self.wavelength) * 1e9
 
         def _swatch(bg_css, label=None):
             text = (label or "")

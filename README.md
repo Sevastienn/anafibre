@@ -14,16 +14,16 @@
 
 
 
-**Anafibre** is an analytical mode solver for cylindrical step-index optical fibres. It provides functions to compute the guided modes of cylindrical waveguides by solving dispersion relations and calculating the corresponding electromagnetic fields analytically.
+**Anafibre** is an analytical mode solver for cylindrical step-index optical fibres. It computes guided modes by solving dispersion relations and evaluating corresponding electromagnetic fields analytically.
 
 ## Features
 
-- 🔬 **Analytical Solutions**: Compute guided modes using exact analytical expressions
-- 🌈 **Mode Visualisation**: Rich visualisation of mode profiles and field distributions  
-- 📊 **Dispersion Analysis**: Calculate dispersion characteristics and effective indices
-- ⚡ **Fast Computation**: Efficient numerical methods for finding propagation constants
-- 🎯 **Flexible Design**: Support for both dielectric and magnetic fibres
-- 📐 **Unit Support**: Optional integration with Astropy units for dimensional analysis
+- 🔬 **Analytical solutions** for guided modes in cylindrical fibres
+- 🌈 **Mode visualisation** with plotting utilities for field components
+- 📊 **Dispersion analysis** helpers and effective index calculations
+- ⚡ **Fast computation** of propagation constants with SciPy-based root finding
+- 🎯 **Flexible materials** support via fixed indices or callable/index-database inputs
+- 📐 **Optional unit support** through Astropy
 
 ## Installation
 
@@ -35,15 +35,14 @@ cd anafibre
 pip install -e .
 ```
 
-### Dependencies
+### Core dependencies
 
-The package requires the following core dependencies:
 - numpy >= 1.20.0
-- scipy >= 1.7.0  
+- scipy >= 1.7.0
 - matplotlib >= 3.5.0
 - IPython >= 7.0.0
 
-Optional dependencies:
+### Optional extras
 - astropy >= 4.0.0 (for unit support) - install with `pip install anafibre[units]`
 - refractiveindex >= 0.1.0 (for refractive index database) - install with `pip install anafibre[refractiveindex]`
 
@@ -59,45 +58,41 @@ pip install anafibre
 
 ```python
 import numpy as np
-import anafibre as af
+import anafibre as fib
 
 # Create a step-index fibre
-core_radius = 4.1e-6  # 4.1 μm
-core_index = 1.46
-clad_index = 1.45
-
-fibre = af.StepIndexFibre(
-    core_radius=core_radius,
-    n_core=core_index,
-    n_clad=clad_index
+fibre = fib.StepIndexFibre(
+    core_radius=250e-9,
+    n_core=2.00,
+    n_clad=1.33
 )
 
-# Find guided modes at 1550 nm
-wavelength = 1550e-9  # 1550 nm
-
-# Get fundamental mode (HE11)
-fundamental_mode = fibre.HE(ell=1, n=1, wl=wavelength)
+# Get fundamental mode (HE11) at 500 nm
+wl = 500e-9
+HE11 = fibre.HE(ell=1, n=1, wl=wl)
 
 # Display mode information  
-print(f"Fundamental mode: {fundamental_mode.mode_label()}")
-print(f"Effective index: {fundamental_mode.neff:.6f}")
+display(HE11)
 
 # For multi-mode fibres, get additional modes
 try:
-    te01 = fibre.TE(n=1, wl=wavelength)  # TE01 mode
-    tm01 = fibre.TM(n=1, wl=wavelength)  # TM01 mode
-    he21 = fibre.HE(ell=2, n=1, wl=wavelength)  # HE21 mode
+    TM01 = fibre.TM(n=1, wl=wl)         # TM01 mode
+    HE21 = fibre.HE(ell=2, n=1, wl=wl)  # HE21 mode
+    TE01 = fibre.TE(n=1, wl=wl)         # TE01 mode
+    EH11 = fibre.EH(ell=1, n=1, wl=wl)  # EH11 mode
 except:
     pass  # Mode may not exist for this fibre
 
-# Calculate field distributions
-mode = fundamental_mode  # Use the mode from above
-x = np.linspace(-2*core_radius, 2*core_radius, 100)
-y = np.linspace(-2*core_radius, 2*core_radius, 100)
+fib.display_modes(HE11, TM01, HE21, TE01, EH11)
+
+# Calculate field distributions on a grid
+mode = HE11  # Use the mode from above
+x = np.linspace(-2*fibre.core_radius, 2*fibre.core_radius, 100)
+y = np.linspace(-2*fibre.core_radius, 2*fibre.core_radius, 100)
 X, Y = np.meshgrid(x, y)
 
-E_field = mode.E(x=X, y=Y)  # Electric field
-H_field = mode.H(x=X, y=Y)  # Magnetic field
+E = mode.E(x=X, y=Y)  # Electric field
+H = mode.H(x=X, y=Y)  # Magnetic field
 ```
 
 ## Key Classes and Functions
@@ -108,10 +103,19 @@ The main class for defining step-index optical fibres:
 
 ```python
 fiber = af.StepIndexFibre(
-    core_radius=4.1e-6,     # Core radius in meters
-    n_core=1.46,            # Core refractive index  
-    n_clad=1.45,            # Cladding refractive index
-    n_substrate=None        # Optional substrate index
+    core_radius=250e-9,     # Core radius in meters (or multiplied by astropy.units)
+    n_core=2.00,            # Core refractive index (number or function of wavelength)
+    n_clad=1.33,            # Cladding refractive index (number or function of wavelength)
+    # or one can provide relative permittivities:
+    eps_core=4.00,          # Core permittivity (number or function of wavelength)
+    eps_clad=1.77,          # Cladding permittivity (number or function of wavelength)
+    # one can also provide permeabilities:
+    mu_core=1.00,           # Core permeability  (number or function of wavelength)
+    mu_clad=1.00,           # Cladding permeability (number or function of wavelength)
+    # if the refractiveindex package is installed, then one can also use:
+    core = SiO2,            # Where the materials are defined using:
+    clad = H2O              # H2O   = fib.RefractiveIndexMaterial(shelf='main', book='H2O', page='Hale')
+# If material properties are provided in more than one way, then the hierarchy is: RefractiveIndexMaterial > eps > n
 )
 ```
 
@@ -120,17 +124,13 @@ fiber = af.StepIndexFibre(
 Represents a guided mode with methods to calculate fields and properties:
 
 ```python
-# Create specific modes
-mode = fibre.HE(ell=1, n=1, wl=1550e-9)  # Fundamental HE11 mode
-te_mode = fibre.TE(n=1, wl=1550e-9)      # TE01 mode  
-tm_mode = fibre.TM(n=1, wl=1550e-9)      # TM01 mode
+# Create the fundamental HE11 mode with linear polarisation along the x-direction
+HE11x = fibre.HE(ell=1, n=1, wl=500e-9, a_plus=1/np.sqrt(2), a_minus=1/np.sqrt(2))
 
 # Mode properties
-print(f"Effective index: {mode.neff}")
-print(f"Propagation constant: {mode.beta}")
-print(f"Mode label: {mode.mode_label()}")
+display(HE11x)
 
-# Field calculations
+# Field can be evaluated at any point provided in (ρ,ϕ,z) or (x,y,z) coordinates, when z is not provided z=0 is assumed
 E = mode.E(rho=rho, phi=phi)  # Cylindrical coordinates
 E = mode.E(x=x, y=y)          # Cartesian coordinates
 ```
@@ -138,14 +138,10 @@ E = mode.E(x=x, y=y)          # Cartesian coordinates
 ### Visualization
 
 ```python
-import matplotlib.pyplot as plt
-from anafibre.plotting import plot_mode_profile
-
-# Plot mode field profile
-fig, ax = plt.subplots(1, 2, figsize=(10, 4))
-plot_mode_profile(mode, component='E', ax=ax[0])
-plot_mode_profile(mode, component='H', ax=ax[1])
-plt.show()
+from anafibre.plotting import  animate_fields_xy
+from IPython.display import HTML
+anim = animate_fields_xy(modes=mode, show=("E",),figsize=(5,5))
+display(HTML(anim.to_jshtml()))
 ```
 
 ## Optional Dependencies
@@ -175,14 +171,7 @@ Check out the `notebooks/` directory for detailed examples:
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
+Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss the changes you would like to make.
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
@@ -192,22 +181,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 If you use Anafibre in your research, please cite:
 
 ```bibtex
-@software{anafibre2025,
+@misc{anafibre2026,
   author = {Golat, Sebastian},
   title = {Anafibre: Analytical mode solver for cylindrical step-index fibres},
-  year = {2025},
+  year = {2026},
   url = {https://github.com/Sevastienn/anafibre},
   version = {0.1.0}
 }
 ```
-
-## Author
-
-**Sebastian Golat**
-- Email: sebastian.golat@gmail.com
-- Affiliation: King's College London
-
-## Acknowledgments
-
-- Developed at King's College London
-

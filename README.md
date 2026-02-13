@@ -2,8 +2,8 @@
 <h1>
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="./logo-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="./logo-light.svg">
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/logos/logo-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="./assets/logos/logo-light.svg">
     <img alt="anafibre logo" src="./logo-light.svg" width="150">
   </picture>
 </p>

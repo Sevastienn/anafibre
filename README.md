@@ -95,50 +95,123 @@ E = mode.E(x=X, y=Y)  # Electric field
 H = mode.H(x=X, y=Y)  # Magnetic field
 ```
 
-## Key Classes and Functions
+## Core API Overview
 
-### StepIndexFibre
+Anafibre revolves around two main abstractions:
 
-The main class for defining step-index optical fibres:
+- `StepIndexFibre` — defines the waveguide (geometry + materials)
+- `GuidedMode` — represents a single solved eigenmode
+
+The typical workflow is:
+
+
+---
+
+### `StepIndexFibre`
+
+Defines the fibre geometry and material parameters and provides dispersion utilities.
+
+#### Required inputs
+
+- `core_radius` (float in meters or `astropy.units.Quantity`)
+- Either:
+  - `n_core`, `n_clad` (scalar or callable λ→ε(λ))
+  - or `eps_core`, `eps_clad` (scalar or callable λ→ε(λ))
+  - or `core`, `clad` as `RefractiveIndexMaterial`
+
+Optional:
+- `mu_core`, `mu_clad`
+
+Example:
 
 ```python
-fiber = af.StepIndexFibre(
+fibre = fib.StepIndexFibre(
+    core_radius=250e-9,
+    n_core=2.00,
+    n_clad=1.33
+)
+
+# or using permittivity or permeability
+
+fibre = fib.StepIndexFibre(
     core_radius=250e-9,     # Core radius in meters (or multiplied by astropy.units)
-    n_core=2.00,            # Core refractive index (number or function of wavelength)
-    n_clad=1.33,            # Cladding refractive index (number or function of wavelength)
-    # or one can provide relative permittivities:
     eps_core=4.00,          # Core permittivity (number or function of wavelength)
     eps_clad=1.77,          # Cladding permittivity (number or function of wavelength)
-    # one can also provide permeabilities:
     mu_core=1.00,           # Core permeability  (number or function of wavelength)
     mu_clad=1.00,           # Cladding permeability (number or function of wavelength)
-    # if the refractiveindex package is installed, then one can also use:
-    core = SiO2,            # Where the materials are defined using:
-    clad = H2O              # H2O   = fib.RefractiveIndexMaterial(shelf='main', book='H2O', page='Hale')
-# If material properties are provided in more than one way, then the hierarchy is: RefractiveIndexMaterial > eps > n
+)
+
+# or with astropy and refractiveindex packages:
+
+import astropy.units as u
+
+SiO2  = fib.RefractiveIndexMaterial(shelf='glass', book='fused_silica', page='Malitson')
+H2O   = fib.RefractiveIndexMaterial(shelf='main', book='H2O', page='Hale')
+
+fibre = fib.StepIndexFibre(
+    core_radius=250*u.nm,
+    core = SiO2,            
+    clad = H2O 
 )
 ```
+If material properties are provided in more than one way, then the hierarchy is: RefractiveIndexMaterial > eps > n.
 
-### GuidedMode
+#### Provides
+Mode constructors:
 
-Represents a guided mode with methods to calculate fields and properties:
+- HE(ell, n, wl, a_plus, a_minus)
+- EH(ell, n, wl, a_plus, a_minus)
+- TE(n, wl)
+- TM(n, wl)
 
+Each returns a `GuidedMode` object.
+
+Dispersion utilities:
+- b(ell, m, V=..., wavelength=...)
+- neff(ell, m, ...)
+- kz(ell, m, ...)
+- V(wavelength)
+
+### `GuidedMode`
+
+Represents a guided mode with methods to calculate fields and properties. It is created using `StepIndexFibre` mode constructors.
+
+Example:
 ```python
-# Create the fundamental HE11 mode with linear polarisation along the x-direction
-HE11x = fibre.HE(ell=1, n=1, wl=500e-9, a_plus=1/np.sqrt(2), a_minus=1/np.sqrt(2))
-
-# Mode properties
-display(HE11x)
-
-# Field can be evaluated at any point provided in (ρ,ϕ,z) or (x,y,z) coordinates, when z is not provided z=0 is assumed
-E = mode.E(rho=rho, phi=phi)  # Cylindrical coordinates
-E = mode.E(x=x, y=y)          # Cartesian coordinates
+# Create the fundamental modes with different polarisations:
+HE11L = fibre.HE(ell=1, n=1, wl=500e-9, a_plus=0, a_minus=1)                            # left circular polarisation
+HE11x = fibre.HE(ell=1, n=1, wl=500e-9, a_plus=1/np.sqrt(2), a_minus=1/np.sqrt(2))      # linear x-polarisation
+HE11y = fibre.HE(ell=1, n=1, wl=500e-9, a_plus=1j/np.sqrt(2), a_minus=-1j/np.sqrt(2))   # linear y-polarisation
 ```
 
-### Visualization
 
+#### Provides
+- Field evaluation in (ρ,ϕ,z) or (x,y,z) coordinates, when z is not provided z=0 is assumed
+  ```python
+  E = mode.E(rho=Rho, phi=Phi, z=Z)  # Cylindrical coordinates
+  H = mode.H(rho=Rho, phi=Phi, z=Z)  # Cylindrical coordinates
+  E = mode.E(x=X, y=Y, z=Z)          # Cartesian coordinates
+  H = mode.H(x=X, y=Y, z=Z)          # Cartesian coordinates
+  ```
+ Both return arrays with a shape (..., 3) corresponding to the Cartesian vector components.
+- Jacobians (gradients) of the fields
+  ```python
+  J_E = mode.gradE(rho=Rho, phi=Phi, z=Z)  # Cylindrical coordinates
+  J_H = mode.gradH(rho=Rho, phi=Phi, z=Z)  # Cylindrical coordinates
+  J_E = mode.gradE(x=X, y=Y, z=Z)          # Cartesian coordinates
+  J_H = mode.gradH(x=X, y=Y, z=Z)          # Cartesian coordinates
+  ```
+ Both return arrays with a shape of (..., 3, 3), corresponding to the Cartesian tensor components.
+- Power evaluated via numerical integration
+  ```python
+  P = mode.Power()
+  ```
+
+
+### Visualization
+The package ships with a built-in plotting utility that creates time-resolved animations of the electromagnetic field in the transverse cross-section of the fibre:
 ```python
-from anafibre.plotting import  animate_fields_xy
+from anafibre.plotting import animate_fields_xy
 from IPython.display import HTML
 anim = animate_fields_xy(modes=mode, show=("E",),figsize=(5,5))
 display(HTML(anim.to_jshtml()))

@@ -134,11 +134,11 @@ fibre = fib.StepIndexFibre(
 # or using permittivity or permeability
 
 fibre = fib.StepIndexFibre(
-    core_radius=250e-9,     # Core radius in meters (or multiplied by astropy.units)
-    eps_core=4.00,          # Core permittivity (number or function of wavelength)
-    eps_clad=1.77,          # Cladding permittivity (number or function of wavelength)
-    mu_core=1.00,           # Core permeability  (number or function of wavelength)
-    mu_clad=1.00,           # Cladding permeability (number or function of wavelength)
+    core_radius=250e-9,
+    eps_core=4.00,
+    eps_clad=1.77,
+    mu_core=1.00,
+    mu_clad=1.00,
 )
 
 # or with astropy and refractiveindex packages:
@@ -150,7 +150,7 @@ H2O   = fib.RefractiveIndexMaterial(shelf='main', book='H2O', page='Hale')
 
 fibre = fib.StepIndexFibre(
     core_radius=250*u.nm,
-    core = SiO2,            
+    core = SiO2,
     clad = H2O 
 )
 ```
@@ -159,18 +159,18 @@ If material properties are provided in more than one way, then the hierarchy is:
 #### Provides
 Mode constructors:
 
-- HE(ell, n, wl, a_plus, a_minus)
-- EH(ell, n, wl, a_plus, a_minus)
-- TE(n, wl)
-- TM(n, wl)
+- `HE(ell, n, wl, a_plus, a_minus)`
+- `EH(ell, n, wl, a_plus, a_minus)`
+- `TE(n, wl)`
+- `TM(n, wl)`
 
 Each returns a `GuidedMode` object.
 
 Dispersion utilities:
-- b(ell, m, V=..., wavelength=...)
-- neff(ell, m, ...)
-- kz(ell, m, ...)
-- V(wavelength)
+- `b(ell, m, V=..., wavelength=...)`
+- `neff(ell, m, ...)`
+- `kz(ell, m, ...)`
+- `V(wavelength)`
 
 ### `GuidedMode`
 
@@ -188,18 +188,18 @@ HE11y = fibre.HE(ell=1, n=1, wl=500e-9, a_plus=1j/np.sqrt(2), a_minus=-1j/np.sqr
 #### Provides
 - Field evaluation in (ρ,ϕ,z) or (x,y,z) coordinates, when z is not provided z=0 is assumed
   ```python
-  E = mode.E(rho=Rho, phi=Phi, z=Z)  # Cylindrical coordinates
-  H = mode.H(rho=Rho, phi=Phi, z=Z)  # Cylindrical coordinates
-  E = mode.E(x=X, y=Y, z=Z)          # Cartesian coordinates
-  H = mode.H(x=X, y=Y, z=Z)          # Cartesian coordinates
+  E = mode.E(rho=Rho, phi=Phi, z=Z)
+  H = mode.H(rho=Rho, phi=Phi, z=Z)
+  E = mode.E(x=X, y=Y, z=Z)
+  H = mode.H(x=X, y=Y, z=Z)
   ```
  Both return arrays with a shape (..., 3) corresponding to the Cartesian vector components.
 - Jacobians (gradients) of the fields
   ```python
-  J_E = mode.gradE(rho=Rho, phi=Phi, z=Z)  # Cylindrical coordinates
-  J_H = mode.gradH(rho=Rho, phi=Phi, z=Z)  # Cylindrical coordinates
-  J_E = mode.gradE(x=X, y=Y, z=Z)          # Cartesian coordinates
-  J_H = mode.gradH(x=X, y=Y, z=Z)          # Cartesian coordinates
+  J_E = mode.gradE(rho=Rho, phi=Phi, z=Z)
+  J_H = mode.gradH(rho=Rho, phi=Phi, z=Z)
+  J_E = mode.gradE(x=X, y=Y, z=Z)
+  J_H = mode.gradH(x=X, y=Y, z=Z)
   ```
  Both return arrays with a shape of (..., 3, 3), corresponding to the Cartesian tensor components.
 - Power evaluated via numerical integration

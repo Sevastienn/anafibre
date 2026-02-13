@@ -405,11 +405,11 @@ class GuidedMode:
     
     def We(self, rho=None, phi=None, z=0, *, x=None, y=None):
         E = self.E(rho=rho, phi=phi, z=z, x=x, y=y)
-        We = 0.25 * np.real(self.eps(rho)*eps0 * np.sum(E * np.conj(E), axis=-1))
+        We = 0.25 * np.real(self.eps(rho) * eps0 * np.sum(E * np.conj(E), axis=-1))
         return We
     def Wm(self, rho=None, phi=None, z=0, *, x=None, y=None):
         H = self.H(rho=rho, phi=phi, z=z, x=x, y=y)
-        Wm = 0.25 * np.real(self.mu(rho) * mu0 * np.sum(H * np.conj(H), axis=-1))
+        Wm = 0.25 * np.real(self.mu(rho)  * mu0  * np.sum(H * np.conj(H), axis=-1))
         return Wm
     def W0(self, rho=None, phi=None, z=0, *, x=None, y=None):
         return self.We(rho=rho, phi=phi, z=z, x=x, y=y) + self.Wm(rho=rho, phi=phi, z=z, x=x, y=y)
@@ -894,11 +894,15 @@ class GuidedMode:
         rows = []
         for m in modes:
             # Wavelength + swatch
+            # try:
+            #     wl_nm = m.wavelength.to_value('nm') if _HAS_UNITS else float(m.wavelength) * 1e9
+            #     wl_str = f"{wl_nm:.2f}"
+            # except Exception:
+            #     wl_nm, wl_str = None, f"{m.wavelength:.2e}"
             try:
                 wl_nm = m.wavelength.to_value('nm') if _HAS_UNITS else float(m.wavelength) * 1e9
-                wl_str = f"{wl_nm:.2f}"
             except Exception:
-                wl_nm, wl_str = None, f"{m.wavelength:.2e}"
+                wl_nm = float(m.wavelength) * 1e9
 
             label, gray = wavelength_band_label_nm(wl_nm) if wl_nm is not None else (None, None)
             if wl_nm is not None and 380 <= wl_nm <= 780:
@@ -922,7 +926,7 @@ class GuidedMode:
             rows.append(f"""
             <tr>
                 <td style="text-align:center;">{m.mode_label()}</td>
-                <td class="num">{swatch_html}{wl_str}</td>
+                <td class="num">{swatch_html}{wl_nm:.2f}</td>
                 <td class="num">{m.V:.2f}</td>
                 <td class="num">{m.neff:.4f}</td>
                 <td class="num">{S1:.2f}</td>

@@ -85,21 +85,20 @@ fibre = fib.StepIndexFibre(
 wl = 500e-9
 HE11 = fibre.HE(ell=1, n=1, wl=wl)
 
-# Display mode information  
-display(HE11)
-
-# For multi-mode fibres, get additional modes
+# Try to get some higher-order modes:
+TM01 = HE21 = TE01 = EH11 = None
 try:
-    TM01 = fibre.TM(n=1, wl=wl)         # TM01 mode
-    HE21 = fibre.HE(ell=2, n=1, wl=wl)  # HE21 mode
-    TE01 = fibre.TE(n=1, wl=wl)         # TE01 mode
-    EH11 = fibre.EH(ell=1, n=1, wl=wl)  # EH11 mode
-except:
-    pass  # Mode may not exist for this fibre
+    TM01 = fibre.TM(n=1, wl=wl)          
+    HE21 = fibre.HE(ell=2, n=1, wl=wl)   
+    TE01 = fibre.TE(n=1, wl=wl)          
+    EH11 = fibre.EH(ell=1, n=1, wl=wl)   
+except (ValueError, RuntimeError):
+    pass  # Some modes may not exist for this fibre
 
-fib.display_modes(HE11, TM01, HE21, TE01, EH11)
+# show only what we actually got
+fib.display_modes(*[m for m in (HE11, TM01, HE21, TE01, EH11) if m is not None])
 
-# Calculate field distributions on a grid
+# Calculate field distributions
 mode = HE11  # Use the mode from above
 x = np.linspace(-2*fibre.core_radius, 2*fibre.core_radius, 100)
 y = np.linspace(-2*fibre.core_radius, 2*fibre.core_radius, 100)
@@ -201,8 +200,6 @@ HE11L = fibre.HE(ell=1, n=1, wl=500e-9, a_plus=0, a_minus=1)                    
 HE11x = fibre.HE(ell=1, n=1, wl=500e-9, a_plus=1/np.sqrt(2), a_minus=1/np.sqrt(2))      # linear x-polarisation
 HE11y = fibre.HE(ell=1, n=1, wl=500e-9, a_plus=1j/np.sqrt(2), a_minus=-1j/np.sqrt(2))   # linear y-polarisation
 ```
-
-
 
 
 

@@ -27,9 +27,9 @@ class TestStepIndexFibre:
     def test_fiber_creation_with_refractive_indices(self):
         """Test creating a StepIndexFibre with typical refractive index parameters."""
         # Typical single-mode fiber parameters
-        core_radius = 4.5e-6  # 4.5 μm
-        n_core = 1.46  # Core refractive index
-        n_clad = 1.45  # Cladding refractive index
+        core_radius = 250e-9  # 250 nm
+        n_core = 2.00  # Core refractive index
+        n_clad = 1.33  # Cladding refractive index
         
         fiber = StepIndexFibre(core_radius=core_radius, n_core=n_core, n_clad=n_clad)
         
@@ -39,17 +39,17 @@ class TestStepIndexFibre:
         assert hasattr(fiber, 'n_clad')
         assert hasattr(fiber, 'V')
         
-        # Test V-parameter calculation at 1550 nm
-        wavelength = 1550e-9
+        # Test V-parameter calculation at 500 nm
+        wavelength = 500e-9
         V = fiber.V(wavelength)
         assert isinstance(V, (float, np.floating))
         assert V > 0  # V-parameter should be positive
         
     def test_fiber_creation_with_permittivity(self):
         """Test creating a StepIndexFibre with direct permittivity parameters."""
-        core_radius = 4.5e-6
-        eps_core = 1.46**2  # ε = n²
-        eps_clad = 1.45**2
+        core_radius = 250e-9
+        eps_core = 2.00**2  # ε = n²
+        eps_clad = 1.33**2
         
         fiber = StepIndexFibre(core_radius=core_radius, eps_core=eps_core, eps_clad=eps_clad)
         
@@ -58,12 +58,12 @@ class TestStepIndexFibre:
         assert hasattr(fiber, 'eps_clad')
         
         # Test that refractive index methods work
-        wavelength = 1550e-9
+        wavelength = 500e-9
         n_core = fiber.n_core(wavelength)
         n_clad = fiber.n_clad(wavelength)
         
-        assert np.isclose(n_core, 1.46, rtol=1e-6)
-        assert np.isclose(n_clad, 1.45, rtol=1e-6)
+        assert np.isclose(n_core, 2.00, rtol=1e-6)
+        assert np.isclose(n_clad, 1.33, rtol=1e-6)
 
 
 class TestGuidedMode:
@@ -72,11 +72,11 @@ class TestGuidedMode:
     @pytest.fixture
     def typical_fiber(self):
         """Create a typical single-mode step-index fiber for testing."""
-        return StepIndexFibre(core_radius=4.5e-6, n_core=1.46, n_clad=1.45)
+        return StepIndexFibre(core_radius=250e-9, n_core=2.00, n_clad=1.33)
     
     def test_fundamental_mode_creation(self, typical_fiber):
-        """Test computing a fundamental mode (HE11) for a fiber at 1550 nm."""
-        wavelength = 1550e-9  # 1550 nm (standard telecom wavelength)
+        """Test computing a fundamental mode (HE11) for a fiber at 500 nm."""
+        wavelength = 500e-9  # 500 nm (visible wavelength)
         
         # Create HE11 mode (fundamental mode: ell=1, n=1)
         mode = typical_fiber.HE(ell=1, n=1, wl=wavelength)
@@ -89,7 +89,7 @@ class TestGuidedMode:
         
     def test_mode_attributes(self, typical_fiber):
         """Test that the mode object has expected attributes."""
-        wavelength = 1550e-9
+        wavelength = 500e-9
         mode = typical_fiber.HE(ell=1, n=1, wl=wavelength)
         
         # Check required attributes exist
@@ -112,7 +112,7 @@ class TestGuidedMode:
         
     def test_mode_label(self, typical_fiber):
         """Test mode labeling functionality."""
-        wavelength = 1550e-9
+        wavelength = 500e-9
         mode = typical_fiber.HE(ell=1, n=1, wl=wavelength)
         
         label = mode.mode_label()
@@ -122,7 +122,7 @@ class TestGuidedMode:
         
     def test_field_calculations_run_without_exceptions(self, typical_fiber):
         """Test that mode field calculations (E and H) run without exceptions for sample input arrays."""
-        wavelength = 1550e-9
+        wavelength = 500e-9
         mode = typical_fiber.HE(ell=1, n=1, wl=wavelength)
         
         # Create sample input arrays - various radial and azimuthal positions
@@ -165,7 +165,7 @@ class TestGuidedMode:
     
     def test_different_mode_types(self, typical_fiber):
         """Test that different mode types can be created."""
-        wavelength = 1550e-9
+        wavelength = 500e-9
         
         # Test TE mode creation
         try:
@@ -174,8 +174,7 @@ class TestGuidedMode:
             assert te_mode.ell == 0
             assert "TE" in te_mode.mode_label()
         except Exception as e:
-            # TE01 mode might not exist for all fiber parameters, that's okay
-            pass
+            pytest.fail(f"Cartesian field calculation failed: {e}")
             
         # Test TM mode creation
         try:
@@ -184,25 +183,15 @@ class TestGuidedMode:
             assert tm_mode.ell == 0
             assert "TM" in tm_mode.mode_label()
         except Exception as e:
-            # TM01 mode might not exist for all fiber parameters, that's okay
-            pass
+            pytest.fail(f"Cartesian field calculation failed: {e}")
     
     def test_field_normalization_option(self, typical_fiber):
         """Test that field calculations work with normalization option."""
-        wavelength = 1550e-9
+        wavelength = 500e-9
         mode = typical_fiber.HE(ell=1, n=1, wl=wavelength)
-        
-        rho_test = np.array([2e-6, 4e-6])
-        phi_test = np.array([0, np.pi/2])
-        
-        # Test with and without normalization
         try:
-            E_norm = mode.E(rho=rho_test, phi=phi_test, Normalise=True)
-            E_no_norm = mode.E(rho=rho_test, phi=phi_test, Normalise=False)
-            
-            assert isinstance(E_norm, np.ndarray)
-            assert isinstance(E_no_norm, np.ndarray)
-            assert E_norm.shape == E_no_norm.shape
+            P=mode.Power()  
+            assert 0.99 < P < 1.00 # Power should be normalized to 1W
         except Exception as e:
             pytest.fail(f"Field normalization test failed: {e}")
 
@@ -213,10 +202,10 @@ class TestIntegrationBasics:
     def test_basic_workflow(self):
         """Test the basic workflow: create fiber -> create mode -> calculate fields."""
         # Step 1: Create fiber
-        fiber = StepIndexFibre(core_radius=4.5e-6, n_core=1.46, n_clad=1.45)
+        fiber = StepIndexFibre(core_radius=250e-9, n_core=2.00, n_clad=1.33)
         
         # Step 2: Create mode  
-        wavelength = 1550e-9
+        wavelength = 500e-9
         mode = fiber.HE(ell=1, n=1, wl=wavelength)
         
         # Step 3: Calculate some properties
@@ -233,7 +222,7 @@ class TestIntegrationBasics:
         
         # Basic sanity checks
         assert V > 0
-        assert 1.45 < neff < 1.46  # Should be between cladding and core index
+        assert 1.33 < neff < 2.00  # Should be between cladding and core index
         assert isinstance(label, str)
         assert E.shape == H.shape
         assert E.shape[-1] == 3  # 3 field components

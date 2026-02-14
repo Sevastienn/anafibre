@@ -10,7 +10,6 @@ authors = [
 ]
 description = "Analytical mode solver for cylindrical step-index fibers"
 readme = "README.md"
-requires-python = ">=3.10"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Programming Language :: Python :: 3",

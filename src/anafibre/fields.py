@@ -413,6 +413,14 @@ class GuidedMode:
         return Wm
     def W0(self, rho=None, phi=None, z=0, *, x=None, y=None):
         return self.We(rho=rho, phi=phi, z=z, x=x, y=y) + self.Wm(rho=rho, phi=phi, z=z, x=x, y=y)
+        # (rho_f, phi_f, z_f, shape, phi_phase, s_phase, z_phase, R0, Rp, Rm) = self._prepare_grid(
+        #     rho=rho, phi=phi, z=z, x=x, y=y
+        # )
+        # A, B = self.A, self.B
+        # kz = self.kz
+        # k0 = self.k0
+        # kap = self.kap(rho_f)
+        # return (0.5*(self.eps(rho_f)*A**2+self.mu(rho_f)*B**2)* (np.abs(R0)**2+(kz**2+k0**2*self.n(rho_f)**2)/(2*np.abs(kap)**2)*(np.abs(Rp)**2+np.abs(Rm)**2))+np.imag(A*np.conj(B))*kz*k0*self.n(rho_f)**2/(np.abs(kap)**2)*(np.abs(Rp)**2-np.abs(Rm)**2)).reshape(*shape)
     def W1(self, rho=None, phi=None, z=0, *, x=None, y=None):
         return self.We(rho=rho, phi=phi, z=z, x=x, y=y) - self.Wm(rho=rho, phi=phi, z=z, x=x, y=y)
     def W2(self, rho=None, phi=None, z=0, *, x=None, y=None):

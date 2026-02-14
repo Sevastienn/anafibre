@@ -10,7 +10,11 @@
 </h1><br>
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![ORCID](https://img.shields.io/badge/ORCID-0000--0003--3947--7634-A6CE39?logo=orcid&logoColor=white)](https://orcid.org/0000-0003-3947-7634)
+<!-- [![arXiv 2512.01784](https://img.shields.io/badge/arXiv-2512.01784-B31B1B)](https://arxiv.org/abs/2512.01784) -->
+<!-- [![PyPI](https://img.shields.io/pypi/v/anafibre.svg)](https://pypi.org/project/anafibre/) -->
+
 
 
 
@@ -26,6 +30,22 @@
 - 📐 **Optional unit support** through Astropy
 
 ## Installation
+
+### Future PyPI Release
+
+The package will be available on PyPI soon:
+
+```bash
+pip install anafibre
+```
+
+> [!TIP]
+> Install optional extras:
+> - `anafibre[all]` → units + refractiveindex.info database support
+> ```
+> pip install anafibre[all]
+> ```
+
 
 ### From Source (recommended for development)
 
@@ -46,13 +66,7 @@ pip install -e .
 - astropy >= 4.0.0 (for unit support) - install with `pip install anafibre[units]`
 - refractiveindex >= 0.1.0 (for refractive index database) - install with `pip install anafibre[refractiveindex]`
 
-### Future PyPI Release
 
-The package will be available on PyPI soon:
-
-```bash
-pip install anafibre
-```
 
 ## Quick Start
 
@@ -101,6 +115,10 @@ Anafibre revolves around two main abstractions:
 
 - `StepIndexFibre` — defines the waveguide (geometry + materials)
 - `GuidedMode` — represents a single solved eigenmode
+
+If `refractiveindex` is installed then also
+- `RefractiveIndexMaterial` — provides the refractive index from [refractiveindex.info](https://refractiveindex.info/) database
+
 
 The typical workflow is:
 
@@ -185,6 +203,9 @@ HE11y = fibre.HE(ell=1, n=1, wl=500e-9, a_plus=1j/np.sqrt(2), a_minus=-1j/np.sqr
 ```
 
 
+
+
+
 #### Provides
 - Field evaluation in (ρ,ϕ,z) or (x,y,z) coordinates, when z is not provided z=0 is assumed
   ```python
@@ -217,14 +238,14 @@ anim = animate_fields_xy(modes=mode, show=("E",),figsize=(5,5))
 display(HTML(anim.to_jshtml()))
 ```
 
-## Optional Dependencies
+<!-- ## Optional Dependencies
 
 - **astropy**: For unit handling and dimensional analysis
   ```bash
   pip install astropy
-  ```
+  ``` -->
 
-## Examples
+<!-- ## Examples
 
 Check out the `notebooks/` directory for detailed examples:
 
@@ -240,7 +261,7 @@ Check out the `notebooks/` directory for detailed examples:
 - SciPy ≥ 1.7.0
 - Matplotlib ≥ 3.5.0
 - refractiveindex ≥ 0.1.0
-- IPython ≥ 7.0.0
+- IPython ≥ 7.0.0 -->
 
 ## Contributing
 

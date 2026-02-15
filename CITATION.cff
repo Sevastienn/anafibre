@@ -12,3 +12,15 @@ license: "MIT"
 version: "0.1.0"
 repository-code: "https://github.com/Sevastienn/anafibre"
 url: "https://github.com/Sevastienn/anafibre"
+
+
+preferred-citation:
+  type: misc
+  authors:
+    - family-names: "Golat"
+      given-names: "Sebastian"
+  title: "Anafibre: Analytical mode solver for cylindrical step-index fibres"
+  year: 2026
+  note: "Python package"
+  url: "https://github.com/Sevastienn/anafibre"
+  version: "0.1.0"

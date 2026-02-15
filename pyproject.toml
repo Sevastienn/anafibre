@@ -1,40 +1,46 @@
 [build-system]
-requires = ["hatchling >= 1.26"]
+requires = ["hatchling>=1.26"]
 build-backend = "hatchling.build"
 
 [project]
-name = "anafibre_sevastien"
+name = "anafibre"
 version = "0.1.0"
 authors = [
-  { name="Sebastian Golat", email="sebastian.golat@gmail.com" },
+  { name = "Sebastian Golat", email = "sebastian.golat@gmail.com" },
 ]
 description = "Analytical mode solver for cylindrical step-index fibers"
 readme = "README.md"
-classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Programming Language :: Python :: 3",
-    "Intended Audience :: Science/Research",
-    "Topic :: Scientific/Engineering :: Physics",    
-    "Operating System :: OS Independent",
-]
 requires-python = ">=3.10"
+
 dependencies = [
-    "numpy>=1.20.0",
-    "scipy>=1.7.0",
-    "matplotlib>=3.5.0",
-    "IPython>=7.0.0",
+  "numpy>=1.20.0",
+  "scipy>=1.7.0",
+  "matplotlib>=3.5.0",
+  "IPython>=7.0.0",
 ]
+
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python :: 3",
+  "Intended Audience :: Science/Research",
+  "Topic :: Scientific/Engineering :: Physics",
+  "Operating System :: OS Independent",
+]
+
+license = { text = "MIT" }
+
+[tool.hatch.metadata]
+# Include license files in the sdist/wheel
+# (Hatch uses tool.* configuration for this kind of packaging detail)
+license-files = ["LICEN[CS]E*"]
+
 [project.optional-dependencies]
 units = ["astropy>=4.0.0"]
 refractiveindex = ["refractiveindex>=0.1.0"]
-all = ["anafibre[units,refractiveindex]"]
-
-license = "MIT"
-license-files = ["LICEN[CS]E*"]
+all = ["anafibre_sevastien[units,refractiveindex]"]
 
 [project.urls]
 Homepage = "https://github.com/Sevastienn/anafibre"
 Repository = "https://github.com/Sevastienn/anafibre"
 Documentation = "https://github.com/Sevastienn/anafibre#readme"
 Issues = "https://github.com/Sevastienn/anafibre/issues"
-

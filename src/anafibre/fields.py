@@ -92,9 +92,9 @@ class GuidedMode:
         # Optional superposition coefficients for ℓ≠0 (degenerate ±|ℓ| pair)
         self.a_plus = complex(a_plus)
         self.a_minus = complex(a_minus)
-        s0 = abs(self.a_plus)**2 + abs(self.a_minus)**2
-        self.a_plus /= np.sqrt(s0)
-        self.a_minus /= np.sqrt(s0)
+        # s0 = abs(self.a_plus)**2 + abs(self.a_minus)**2
+        # self.a_plus /= np.sqrt(s0)
+        # self.a_minus /= np.sqrt(s0)
 
         self.V = fibre.V(wavelength)
         self.b = fibre.b(ell, m, wavelength=self.wavelength, mode_type=mode_type, N_b=N_b)[0]
@@ -797,9 +797,11 @@ class GuidedMode:
 
         # stokes parameters for ell\neq 0
         if self.ell != 0:
-            S1 = 2 * np.real(self.a_plus * np.conj(self.a_minus))
-            S2 = 2 * np.imag(self.a_plus * np.conj(self.a_minus))
-            S3 = np.abs(self.a_plus) ** 2 - np.abs(self.a_minus) ** 2
+            S0 = np.abs(self.a_plus) ** 2 + np.abs(self.a_minus) ** 2
+            S1 = 2 * np.real(self.a_plus * np.conj(self.a_minus))/S0
+            S2 = 2 * np.imag(self.a_plus * np.conj(self.a_minus))/S0
+            S3 = (np.abs(self.a_plus) ** 2 - np.abs(self.a_minus) ** 2)/S0
+            
         elif self.mode_type == "TE":
             S1, S2, S3 = -1.0, 0.0, 0.0
         elif self.mode_type == "TM":
@@ -852,6 +854,7 @@ class GuidedMode:
                 <th scope="col" class="num">s<sub>1</sub></th>
                 <th scope="col" class="num">s<sub>2</sub></th>
                 <th scope="col" class="num">s<sub>3</sub></th>
+                <th scope="col" class="num">S<sub>0</sub></th>
             </tr>
             </thead>
             <tbody>
@@ -865,6 +868,7 @@ class GuidedMode:
                 <td class="num">{S1:.2f}</td>
                 <td class="num">{S2:.2f}</td>
                 <td class="num">{S3:.2f}</td>
+                <td class="num">{S0:.2f}</td>
             </tr>
             </tbody>
         </table>
@@ -923,12 +927,15 @@ class GuidedMode:
 
             # Stokes
             if getattr(m, "ell", 0) != 0 and hasattr(m, "a_plus") and hasattr(m, "a_minus"):
-                S1 = 2 * np.real(m.a_plus * np.conj(m.a_minus))
-                S2 = 2 * np.imag(m.a_plus * np.conj(m.a_minus))
-                S3 = np.abs(m.a_plus)**2 - np.abs(m.a_minus)**2
+                S0 = np.abs(m.a_plus)**2 + np.abs(m.a_minus)**2
+                S1 = 2 * np.real(m.a_plus * np.conj(m.a_minus))/S0
+                S2 = 2 * np.imag(m.a_plus * np.conj(m.a_minus))/S0
+                S3 = (np.abs(m.a_plus)**2 - np.abs(m.a_minus)**2)/S0
             elif getattr(m, "ell", 0) == 0 and getattr(m, "mode_type", None) == "TE":
+                S0 = np.abs(m.a_plus)**2 + np.abs(m.a_minus)**2
                 S1, S2, S3 = -1.0, 0.0, 0.0
             else:
+                S0 = np.abs(m.a_plus)**2 + np.abs(m.a_minus)**2
                 S1, S2, S3 = 1.0, 0.0, 0.0
 
             rows.append(f"""
@@ -940,6 +947,7 @@ class GuidedMode:
                 <td class="num">{S1:.2f}</td>
                 <td class="num">{S2:.2f}</td>
                 <td class="num">{S3:.2f}</td>
+                <td class="num">{S0:.2f}</td>
             </tr>
             """)
 
@@ -978,6 +986,7 @@ class GuidedMode:
             <th scope="col" class="num">s<sub>1</sub></th>
             <th scope="col" class="num">s<sub>2</sub></th>
             <th scope="col" class="num">s<sub>3</sub></th>
+            <th scope="col" class="num">S<sub>0</sub></th>
             </tr>
         </thead>
         <tbody>

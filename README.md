@@ -4,57 +4,63 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="./assets/logos/logo-dark.svg">
     <source media="(prefers-color-scheme: light)" srcset="./assets/logos/logo-light.svg">
-    <img alt="anafibre logo" src="./logo-light.svg" width="150">
+    <img alt="anafibre logo" src="./assets/logos/logo-light.svg" width="150">
   </picture>
 </p>
 </h1><br>
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![PyPI](https://img.shields.io/pypi/v/anafibre.svg)](https://pypi.org/project/anafibre/)
 [![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![ORCID](https://img.shields.io/badge/ORCID-0000--0003--3947--7634-A6CE39?logo=orcid&logoColor=white)](https://orcid.org/0000-0003-3947-7634)
-<!-- [![arXiv 2512.01784](https://img.shields.io/badge/arXiv-2512.01784-B31B1B)](https://arxiv.org/abs/2512.01784) -->
-<!-- [![PyPI](https://img.shields.io/pypi/v/anafibre.svg)](https://pypi.org/project/anafibre/) -->
 
-
+<!-- [![TestPyPI](https://img.shields.io/badge/dynamic/json?url=https://test.pypi.org/pypi/anafibre-sevastien/json&query=$.info.version&label=TestPyPI&color=blue)](https://test.pypi.org/project/anafibre-sevastien/)
+[![arXiv](https://img.shields.io/badge/arXiv-2512.01784-B31B1B?logo=data:image/svg+xml;base64,PHN2ZyBpZD0ibG9nb21hcmsiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgdmlld0JveD0iMCAwIDE3LjczMiAyNC4yNjkiPjxnIGlkPSJ0aW55Ij48cGF0aCBkPSJNNTczLjU0OSwyODAuOTE2bDIuMjY2LDIuNzM4LDYuNjc0LTcuODRjLjM1My0uNDcuNTItLjcxNy4zNTMtMS4xMTdhMS4yMTgsMS4yMTgsMCwwLDAtMS4wNjEtLjc0OGgwYS45NTMuOTUzLDAsMCwwLS43MTIuMjYyWiIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoLTU2Ni45ODQgLTI3MS41NDgpIiBmaWxsPSIjYmRiOWI0Ii8+PHBhdGggZD0iTTU3OS41MjUsMjgyLjIyNWwtMTAuNjA2LTEwLjE3NGExLjQxMywxLjQxMywwLDAsMC0uODM0LS41LDEuMDksMS4wOSwwLDAsMC0xLjAyNy42NmMtLjE2Ny40LS4wNDcuNjgxLjMxOSwxLjIwNmw4LjQ0LDEwLjI0MmgwbC02LjI4Miw3LjcxNmExLjMzNiwxLjMzNiwwLDAsMC0uMzIzLDEuMywxLjExNCwxLjExNCwwLDAsMCwxLjA0LjY5QS45OTIuOTkyLDAsMCwwLDU3MSwyOTNsOC41MTktNy45MkExLjkyNCwxLjkyNCwwLDAsMCw1NzkuNTI1LDI4Mi4yMjVaIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSgtNTY2Ljk4NCAtMjcxLjU0OCkiIGZpbGw9IiNiMzFiMWIiLz48cGF0aCBkPSJNNTg0LjMyLDI5My45MTJsLTguNTI1LTEwLjI3NSwwLDBMNTczLjUzLDI4MC45bC0xLjM4OSwxLjI1NGEyLjA2MywyLjA2MywwLDAsMCwwLDIuOTY1bDEwLjgxMiwxMC40MTlhLjkyNS45MjUsMCwwLDAsLjc0Mi4yODIsMS4wMzksMS4wMzksMCwwLDAsLjk1My0uNjY3QTEuMjYxLDEuMjYxLDAsMCwwLDU4NC4zMiwyOTMuOTEyWiIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoLTU2Ni45ODQgLTI3MS41NDgpIiBmaWxsPSIjYmRiOWI0Ii8+PC9nPjwvc3ZnPg==)](https://arxiv.org/abs/2512.01784) -->
 
 
 **Anafibre** is an analytical mode solver for cylindrical step-index optical fibres. It computes guided modes by solving dispersion relations and evaluating corresponding electromagnetic fields analytically.
+$$\boldsymbol{F}_{\ell m}(t,\boldsymbol{r})=\mathrm{e}^{-\mathrm{i} \omega t}\sum_{s=-1}^1 F_{\ell m}^{(s)}(\rho)\,\boldsymbol{e}_{s}\;\mathrm{e}^{\mathrm{i} (\ell-s)\varphi}\mathrm{e}^{\mathrm{i} k_z z}$$
 
 ## Features
 
 - 🔬 **Analytical solutions** for guided modes in cylindrical fibres
 - 🌈 **Mode visualisation** with plotting utilities for field components
 - 📊 **Dispersion analysis** helpers and effective index calculations
-- ⚡ **Fast computation** of propagation constants with SciPy-based root finding
-- 🎯 **Flexible materials** support via fixed indices or callable/index-database inputs
-- 📐 **Optional unit support** through Astropy
+- ⚡ **Fast computation** of propagation constants with [SciPy](https://github.com/scipy/scipy)-based root finding
+- 🎯 **Flexible materials** support via fixed indices, callables or [refractiveindex.info](https://refractiveindex.info/) database 
+- 📐 **Optional unit support** through [Astropy](https://github.com/astropy/astropy)
 
 ## Installation
 
-### Future PyPI Release
-
-The package will be available on PyPI soon:
-
+### Install from PyPI
 ```bash
 pip install anafibre
 ```
 
-> [!TIP]
-> Install optional extras:
-> - `anafibre[all]` → units + refractiveindex.info database support
-> ```
-> pip install anafibre[all]
-> ```
+### Optional extras
+- Units support using [`astropy.units.Quantity`](https://docs.astropy.org/en/stable/units/quantity.html)
+  ```bash
+  pip install "anafibre[units]"
+  ```
+- [refractiveindex.info](https://refractiveindex.info/) database support
+  ```bash
+  pip install "anafibre[refractiveindex]"
+  ```
+- All optional features (units + [refractiveindex.info](https://refractiveindex.info/))
+  ```bash
+  pip install "anafibre[all]"
+  ```
 
 
-### From Source (recommended for development)
+
+### From Source (development)
 
 ```bash
 git clone https://github.com/Sevastienn/anafibre.git
 cd anafibre
 pip install -e .
 ```
-
+<!-- 
 ### Core dependencies
 
 - numpy >= 1.20.0
@@ -64,7 +70,7 @@ pip install -e .
 
 ### Optional extras
 - astropy >= 4.0.0 (for unit support) - install with `pip install anafibre[units]`
-- refractiveindex >= 0.1.0 (for refractive index database) - install with `pip install anafibre[refractiveindex]`
+- refractiveindex >= 0.1.0 (for refractive index database) - install with `pip install anafibre[refractiveindex]` -->
 
 
 
@@ -110,20 +116,18 @@ H = mode.H(x=X, y=Y)  # Magnetic field
 
 ## Core API Overview
 
-Anafibre revolves around two main abstractions:
-
+Anafibre has two main objects:
 - `StepIndexFibre` — defines the waveguide (geometry + materials)
 - `GuidedMode` — represents a single solved eigenmode
 
-If `refractiveindex` is installed then also
-- `RefractiveIndexMaterial` — provides the refractive index from [refractiveindex.info](https://refractiveindex.info/) database
-
-
 The typical workflow is:
-
+```python
+fibre = StepIndexFibre(...)
+mode = fibre.HE(...)
+E = mode.E(x=X, y=Y)
+```
 
 ---
-
 ### `StepIndexFibre`
 
 Defines the fibre geometry and material parameters and provides dispersion utilities.
@@ -131,64 +135,37 @@ Defines the fibre geometry and material parameters and provides dispersion utili
 #### Required inputs
 
 - `core_radius` (float in meters or `astropy.units.Quantity`)
-- Either:
-  - `n_core`, `n_clad` (scalar or callable λ→ε(λ))
-  - or `eps_core`, `eps_clad` (scalar or callable λ→ε(λ))
-  - or `core`, `clad` as `RefractiveIndexMaterial`
+- One of:
+  - `core`, `clad` as `RefractiveIndexMaterial`
+  - `n_core`, `n_clad` (float or callable λ→ε(λ))
+  - `eps_core`, `eps_clad` (float or callable λ→ε(λ))
+#### Optional inputs
+- `mu_core`, `mu_clad` (float or callable λ→ε(λ))
 
-Optional:
-- `mu_core`, `mu_clad`
+#### Example
 
-Example:
-
-```python
-fibre = fib.StepIndexFibre(
-    core_radius=250e-9,
-    n_core=2.00,
-    n_clad=1.33
-)
-
-# or using permittivity or permeability
-
-fibre = fib.StepIndexFibre(
-    core_radius=250e-9,
-    eps_core=4.00,
-    eps_clad=1.77,
-    mu_core=1.00,
-    mu_clad=1.00,
-)
-
-# or with astropy and refractiveindex packages:
-
-import astropy.units as u
-
-SiO2  = fib.RefractiveIndexMaterial(shelf='glass', book='fused_silica', page='Malitson')
-H2O   = fib.RefractiveIndexMaterial(shelf='main', book='H2O', page='Hale')
-
-fibre = fib.StepIndexFibre(
-    core_radius=250*u.nm,
-    core = SiO2,
-    clad = H2O 
-)
-```
-If material properties are provided in more than one way, then the hierarchy is: RefractiveIndexMaterial > eps > n.
+  ```python
+  fibre = fib.StepIndexFibre(core_radius=250e-9, n_core=2.00, n_clad=1.33)
+  ```
 
 #### Provides
-Mode constructors:
+- **Mode constructors** for $\text{HE}_{\ell n}$, $\text{EH}_{\ell n}$, $\text{TE}_{0 n}$, and $\text{TM}_{0 n}$ modes
+  ```python
+  fibre.HE(ell, n, wl, a_plus=..., a_minus=...)
+  fibre.EH(...)
+  fibre.TE(...)
+  fibre.TM(...)
+  ```
+  Each returns a `GuidedMode` object.
 
-- `HE(ell, n, wl, a_plus, a_minus)`
-- `EH(ell, n, wl, a_plus, a_minus)`
-- `TE(n, wl)`
-- `TM(n, wl)`
-
-Each returns a `GuidedMode` object.
-
-Dispersion utilities:
-- `b(ell, m, V=..., wavelength=...)`
-- `neff(ell, m, ...)`
-- `kz(ell, m, ...)`
-- `V(wavelength)`
-
+- **Dispersion utilities** to find $V$, $b$, $k_z$ and $n_\text{eff}$ 
+  ```python
+  fibre.V(wavelength)
+  fibre.b(ell, m, V=..., wavelength=...)
+  fibre.kz(...)
+  fibre.neff(...)
+  ```
+---
 ### `GuidedMode`
 
 Represents a guided mode with methods to calculate fields and properties. It is created using `StepIndexFibre` mode constructors.
@@ -196,9 +173,9 @@ Represents a guided mode with methods to calculate fields and properties. It is 
 Example:
 ```python
 # Create the fundamental modes with different polarisations:
-HE11L = fibre.HE(ell=1, n=1, wl=500e-9, a_plus=0, a_minus=1)                            # left circular polarisation
-HE11x = fibre.HE(ell=1, n=1, wl=500e-9, a_plus=1/np.sqrt(2), a_minus=1/np.sqrt(2))      # linear x-polarisation
-HE11y = fibre.HE(ell=1, n=1, wl=500e-9, a_plus=1j/np.sqrt(2), a_minus=-1j/np.sqrt(2))   # linear y-polarisation
+HE11L = fibre.HE(ell=1, n=1, wl=500e-9, a_plus=0, a_minus=1)
+HE11x = fibre.HE(ell=1, n=1, wl=500e-9, a_plus=1/np.sqrt(2), a_minus=1/np.sqrt(2))
+HE11y = fibre.HE(ell=1, n=1, wl=500e-9, a_plus=1j/np.sqrt(2), a_minus=-1j/np.sqrt(2))
 ```
 
 
@@ -234,31 +211,6 @@ from IPython.display import HTML
 anim = animate_fields_xy(modes=mode, show=("E",),figsize=(5,5))
 display(HTML(anim.to_jshtml()))
 ```
-
-<!-- ## Optional Dependencies
-
-- **astropy**: For unit handling and dimensional analysis
-  ```bash
-  pip install astropy
-  ``` -->
-
-<!-- ## Examples
-
-Check out the `notebooks/` directory for detailed examples:
-
-- Basic fibre mode calculations
-- Dispersion analysis
-- Mode field visualisation  
-- Multi-mode fibre analysis
-
-## Requirements
-
-- Python ≥ 3.8
-- NumPy ≥ 1.20.0
-- SciPy ≥ 1.7.0
-- Matplotlib ≥ 3.5.0
-- refractiveindex ≥ 0.1.0
-- IPython ≥ 7.0.0 -->
 
 ## Contributing
 

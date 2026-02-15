@@ -19,7 +19,6 @@
 
 
 **Anafibre** is an analytical mode solver for cylindrical step-index optical fibres. It computes guided modes by solving dispersion relations and evaluating corresponding electromagnetic fields analytically.
-$$\boldsymbol{F}_{\ell m}(t,\boldsymbol{r})=\mathrm{e}^{-\mathrm{i} \omega t}\sum_{s=-1}^1 F_{\ell m}^{(s)}(\rho)\,\boldsymbol{e}_{s}\;\mathrm{e}^{\mathrm{i} (\ell-s)\varphi}\mathrm{e}^{\mathrm{i} k_z z}$$
 
 ## Features
 
@@ -137,10 +136,10 @@ Defines the fibre geometry and material parameters and provides dispersion utili
 - `core_radius` (float in meters or `astropy.units.Quantity`)
 - One of:
   - `core`, `clad` as `RefractiveIndexMaterial`
-  - `n_core`, `n_clad` (float or callable λ→ε(λ))
-  - `eps_core`, `eps_clad` (float or callable λ→ε(λ))
+  - `n_core`, `n_clad` (float or callable *λ→ε*(*λ*))
+  - `eps_core`, `eps_clad` (float or callable *λ→ε*(*λ*))
 #### Optional inputs
-- `mu_core`, `mu_clad` (float or callable λ→ε(λ))
+- `mu_core`, `mu_clad` (float or callable *λ→ε*(*λ*))
 
 #### Example
 
@@ -149,7 +148,7 @@ Defines the fibre geometry and material parameters and provides dispersion utili
   ```
 
 #### Provides
-- **Mode constructors** for $\text{HE}_{\ell n}$, $\text{EH}_{\ell n}$, $\text{TE}_{0 n}$, and $\text{TM}_{0 n}$ modes
+- **Mode constructors** for HE<sub>ℓn&nbsp;</sub>, EH<sub>ℓn&nbsp;</sub>, TE<sub>0n&nbsp;</sub>, and TM<sub>0n</sub> modes
   ```python
   fibre.HE(ell, n, wl, a_plus=..., a_minus=...)
   fibre.EH(...)
@@ -158,7 +157,7 @@ Defines the fibre geometry and material parameters and provides dispersion utili
   ```
   Each returns a `GuidedMode` object.
 
-- **Dispersion utilities** to find $V$, $b$, $k_z$ and $n_\text{eff}$ 
+- **Dispersion utilities** to find *V, b, k<sub>z </sub>,*&nbsp;and *n*<sub>eff</sub>
   ```python
   fibre.V(wavelength)
   fibre.b(ell, m, V=..., wavelength=...)

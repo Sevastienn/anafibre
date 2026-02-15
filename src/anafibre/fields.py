@@ -81,7 +81,7 @@ class ModeNotFoundError(RuntimeError):
 # ---------------------------- core class ------------------------------------
 
 class GuidedMode:
-    def __init__(self, fibre, ell, m, wavelength, mode_type=None, N_b=2000, *, a_plus=1.0, a_minus=0.0):
+    def __init__(self, fibre, ell, m, wavelength, mode_type=None, N_b=2000, *, a=1.0, a_plus=None, a_minus=None):
         self.fibre = fibre
         self.ell = ell
         self.m = m
@@ -90,11 +90,27 @@ class GuidedMode:
         self.mode_type = mode_type
 
         # Optional superposition coefficients for ℓ≠0 (degenerate ±|ℓ| pair)
+        if (a_plus is None) and (a_minus is None):
+            a_plus = a
+            a_minus = 0.0
+        else:
+            # If user is specifying the pair, allow partial specification
+            if a_plus is None:
+                a_plus = a
+            if a_minus is None:
+                a_minus = 0.0
+
+        # Handle non-degenerate ℓ = 0 modes (TE/TM etc.)
+        if ell == 0 and a_minus != 0:
+            warnings.warn(
+                "For ℓ=0 modes (non-degenerate), a_minus is ignored.",
+                UserWarning,
+                stacklevel=2
+            )
+            a_minus = 0.0
+
         self.a_plus = complex(a_plus)
         self.a_minus = complex(a_minus)
-        # s0 = abs(self.a_plus)**2 + abs(self.a_minus)**2
-        # self.a_plus /= np.sqrt(s0)
-        # self.a_minus /= np.sqrt(s0)
 
         self.V = fibre.V(wavelength)
         self.b = fibre.b(ell, m, wavelength=self.wavelength, mode_type=mode_type, N_b=N_b)[0]

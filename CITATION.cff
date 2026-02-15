@@ -15,7 +15,7 @@ url: "https://github.com/Sevastienn/anafibre"
 
 
 preferred-citation:
-  type: misc
+  type: software
   authors:
     - family-names: "Golat"
       given-names: "Sebastian"

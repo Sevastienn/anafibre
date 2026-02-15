@@ -72,7 +72,7 @@ pip install -e .
 - refractiveindex >= 0.1.0 (for refractive index database) - install with `pip install anafibre[refractiveindex]` -->
 
 
-
+<!-- 
 ## Quick Start
 
 ```python
@@ -111,7 +111,7 @@ X, Y = np.meshgrid(x, y)
 
 E = mode.E(x=X, y=Y)  # Electric field
 H = mode.H(x=X, y=Y)  # Magnetic field
-```
+``` -->
 
 ## Core API Overview
 
@@ -152,7 +152,7 @@ Defines the fibre geometry and material parameters and provides dispersion utili
   ```python
   fibre.HE(ell, n, wl, a_plus=..., a_minus=...)
   fibre.EH(...)
-  fibre.TE(...)
+  fibre.TE(n, wl, a=...)
   fibre.TM(...)
   ```
   Each returns a `GuidedMode` object.
@@ -169,13 +169,13 @@ Defines the fibre geometry and material parameters and provides dispersion utili
 
 Represents a guided mode with methods to calculate fields and properties. It is created using `StepIndexFibre` mode constructors.
 
-Example:
+<!-- Example:
 ```python
 # Create the fundamental modes with different polarisations:
 HE11L = fibre.HE(ell=1, n=1, wl=500e-9, a_plus=0, a_minus=1)
 HE11x = fibre.HE(ell=1, n=1, wl=500e-9, a_plus=1/np.sqrt(2), a_minus=1/np.sqrt(2))
 HE11y = fibre.HE(ell=1, n=1, wl=500e-9, a_plus=1j/np.sqrt(2), a_minus=-1j/np.sqrt(2))
-```
+``` -->
 
 
 
@@ -211,12 +211,6 @@ anim = animate_fields_xy(modes=mode, show=("E",),figsize=(5,5))
 display(HTML(anim.to_jshtml()))
 ```
 
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss the changes you would like to make.
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Citation
 

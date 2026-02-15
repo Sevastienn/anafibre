@@ -202,7 +202,7 @@ HE11y = fibre.HE(ell=1, n=1, wl=500e-9, a_plus=1j/np.sqrt(2), a_minus=-1j/np.sqr
   ```
 
 
-### Visualization
+### Visualisation
 The package ships with a built-in plotting utility that creates time-resolved animations of the electromagnetic field in the transverse cross-section of the fibre:
 ```python
 from anafibre.plotting import animate_fields_xy
@@ -218,10 +218,10 @@ If you use Anafibre in your research, please cite:
 
 ```bibtex
 @misc{anafibre2026,
-  author = {Golat, Sebastian},
-  title = {Anafibre: Analytical mode solver for cylindrical step-index fibres},
-  year = {2026},
-  url = {https://github.com/Sevastienn/anafibre},
-  version = {0.1.0}
-}
+  author  = {Golat, Sebastian},
+  title   = {{Anafibre: Analytical mode solver for cylindrical step-index fibres}},
+  year    = {2026},
+  note    = {{Python package}},
+  url     = {https://github.com/Sevastienn/anafibre},
+  version = {0.1.0}}
 ```

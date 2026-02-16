@@ -358,7 +358,7 @@ class GuidedMode:
             cache["phi_phase"], cache["s_phase"], cache["z_phase"], cache["R0"], cache["Rp"], cache["Rm"],
         )
 
-    def _spin_components(self, field, rho_flat, phi_flat, z_flat, phi_phase, s_phase, z_phase):
+    def _spin_components(self, field, rho_flat, phi_phase, s_phase, z_phase):
         A, B = self.A, self.B
         kz = self.kz
         k0 = self.k0
@@ -383,72 +383,6 @@ class GuidedMode:
         c_minus = ((-1j * kz * A1 - k0 * alpha * A2) / (kap * np.sqrt(2*beta0)))
 
         return F0, c_plus, c_minus, phi_phase, s_phase, z_phase
-
-    # ------------------------------- public API ------------------------------
-    def E(self, rho=None, phi=None, z=0, *, x=None, y=None, Normalise=False):
-        (rho_f, phi_f, z_f, shape, phi_phase, s_phase, z_phase, R0, Rp, Rm) = self._prepare_grid(
-            rho=rho, phi=phi, z=z, x=x, y=y
-        )
-        F0, c_plus, c_minus, phi_phase, s_phase, z_phase = self._spin_components('E', rho_f, phi_f, z_f, phi_phase, s_phase, z_phase)
-        F0_plus = F0 * R0 * phi_phase * z_phase
-        Fp_plus = c_plus * Rp * np.conj(s_phase) * phi_phase * z_phase
-        Fm_plus = c_minus * Rm * s_phase * phi_phase * z_phase
-        F0_minus = F0 * R0 * np.conj(phi_phase) * z_phase
-        Fp_minus = c_minus * Rm * np.conj(s_phase) * np.conj(phi_phase) * z_phase
-        Fm_minus = c_plus * Rp * s_phase * np.conj(phi_phase) * z_phase
-        F0 = self.a_plus * F0_plus + self.a_minus * F0_minus
-        Fp = self.a_plus * Fp_plus + self.a_minus * Fp_minus
-        Fm = self.a_plus * Fm_plus + self.a_minus * Fm_minus
-
-        return spin_to_cartesian(F0, Fp, Fm).reshape(*shape, 3)
-    
-    def H(self, rho=None, phi=None, z=0, *, x=None, y=None, Normalise=False):
-        (rho_f, phi_f, z_f, shape, phi_phase, s_phase, z_phase, R0, Rp, Rm) = self._prepare_grid(
-            rho=rho, phi=phi, z=z, x=x, y=y
-        )
-        F0, c_plus, c_minus, phi_phase, s_phase, z_phase = self._spin_components('H', rho_f, phi_f, z_f, phi_phase, s_phase, z_phase)
-        F0_plus = F0 * R0 * phi_phase * z_phase
-        Fp_plus = c_plus * Rp * np.conj(s_phase) * phi_phase * z_phase
-        Fm_plus = c_minus * Rm * s_phase * phi_phase * z_phase
-        F0_minus = -F0 * R0 * np.conj(phi_phase) * z_phase
-        Fp_minus = -c_minus * Rm * np.conj(s_phase) * np.conj(phi_phase) * z_phase
-        Fm_minus = -c_plus * Rp * s_phase * np.conj(phi_phase) * z_phase
-        F0 = self.a_plus * F0_plus + self.a_minus * F0_minus
-        Fp = self.a_plus * Fp_plus + self.a_minus * Fp_minus
-        Fm = self.a_plus * Fm_plus + self.a_minus * Fm_minus
-
-        return spin_to_cartesian(F0, Fp, Fm).reshape(*shape, 3)
-    
-    def We(self, rho=None, phi=None, z=0, *, x=None, y=None):
-        E = self.E(rho=rho, phi=phi, z=z, x=x, y=y)
-        We = 0.25 * np.real(self.eps(rho) * eps0 * np.sum(E * np.conj(E), axis=-1))
-        return We
-    def Wm(self, rho=None, phi=None, z=0, *, x=None, y=None):
-        H = self.H(rho=rho, phi=phi, z=z, x=x, y=y)
-        Wm = 0.25 * np.real(self.mu(rho)  * mu0  * np.sum(H * np.conj(H), axis=-1))
-        return Wm
-    def W0(self, rho=None, phi=None, z=0, *, x=None, y=None):
-        return self.We(rho=rho, phi=phi, z=z, x=x, y=y) + self.Wm(rho=rho, phi=phi, z=z, x=x, y=y)
-        # (rho_f, phi_f, z_f, shape, phi_phase, s_phase, z_phase, R0, Rp, Rm) = self._prepare_grid(
-        #     rho=rho, phi=phi, z=z, x=x, y=y
-        # )
-        # A, B = self.A, self.B
-        # kz = self.kz
-        # k0 = self.k0
-        # kap = self.kap(rho_f)
-        # return (0.5*(self.eps(rho_f)*A**2+self.mu(rho_f)*B**2)* (np.abs(R0)**2+(kz**2+k0**2*self.n(rho_f)**2)/(2*np.abs(kap)**2)*(np.abs(Rp)**2+np.abs(Rm)**2))+np.imag(A*np.conj(B))*kz*k0*self.n(rho_f)**2/(np.abs(kap)**2)*(np.abs(Rp)**2-np.abs(Rm)**2)).reshape(*shape)
-    def W1(self, rho=None, phi=None, z=0, *, x=None, y=None):
-        return self.We(rho=rho, phi=phi, z=z, x=x, y=y) - self.Wm(rho=rho, phi=phi, z=z, x=x, y=y)
-    def W2(self, rho=None, phi=None, z=0, *, x=None, y=None):
-        E = self.E(rho=rho, phi=phi, z=z, x=x, y=y)
-        H = self.H(rho=rho, phi=phi, z=z, x=x, y=y)
-        W2 = -0.5 * np.real(np.sqrt(self.eps(rho) * eps0 * self.mu(rho) * mu0) * np.sum(H * np.conj(E), axis=-1))
-        return W2
-    def W3(self, rho=None, phi=None, z=0, *, x=None, y=None):
-        E = self.E(rho=rho, phi=phi, z=z, x=x, y=y)
-        H = self.H(rho=rho, phi=phi, z=z, x=x, y=y)
-        W3 = -0.5 * np.imag(np.sqrt(self.eps(rho) * eps0 * self.mu(rho) * mu0) * np.sum(H * np.conj(E), axis=-1))
-        return W3
     
     def _radial_log_derivative(self, s, ell, rho):
         """
@@ -491,12 +425,6 @@ class GuidedMode:
 
         return out
 
-    def gradE(self, rho=None, phi=None, z=0, *, x=None, y=None, coord="cartesian"):
-        return self._grad_field("E", rho=rho, phi=phi, z=z, x=x, y=y, coord=coord)
-
-    def gradH(self, rho=None, phi=None, z=0, *, x=None, y=None, coord="cartesian"):
-        return self._grad_field("H", rho=rho, phi=phi, z=z, x=x, y=y, coord=coord)
-
     def _grad_field(self, which, rho=None, phi=None, z=0, *, x=None, y=None, coord="cartesian"):
         """
         Analytical Jacobian for E or H.
@@ -518,7 +446,7 @@ class GuidedMode:
 
         # Spin coefficients (exactly as your E/H do)
         F0c, c_plus, c_minus, phi_phase, s_phase, z_phase = self._spin_components(
-            which, rho_f, phi_f, z_f, phi_phase, s_phase, z_phase
+            which, rho_f, phi_phase, s_phase, z_phase
         )
 
         # Build branch-resolved spin fields exactly like E()/H()
@@ -606,7 +534,47 @@ class GuidedMode:
         J = np.stack([dX, dY, dZ], axis=-1)
         return J.reshape(*shape, 3, 3)
 
+    # ------------------------------- public API ------------------------------
+    def E(self, rho=None, phi=None, z=0, *, x=None, y=None):
+        (rho_f, phi_f, z_f, shape, phi_phase, s_phase, z_phase, R0, Rp, Rm) = self._prepare_grid(
+            rho=rho, phi=phi, z=z, x=x, y=y
+        )
+        F0, c_plus, c_minus, phi_phase, s_phase, z_phase = self._spin_components('E', rho_f, phi_phase, s_phase, z_phase)
+        F0_plus = F0 * R0 * phi_phase * z_phase
+        Fp_plus = c_plus * Rp * np.conj(s_phase) * phi_phase * z_phase
+        Fm_plus = c_minus * Rm * s_phase * phi_phase * z_phase
+        F0_minus = F0 * R0 * np.conj(phi_phase) * z_phase
+        Fp_minus = c_minus * Rm * np.conj(s_phase) * np.conj(phi_phase) * z_phase
+        Fm_minus = c_plus * Rp * s_phase * np.conj(phi_phase) * z_phase
+        F0 = self.a_plus * F0_plus + self.a_minus * F0_minus
+        Fp = self.a_plus * Fp_plus + self.a_minus * Fp_minus
+        Fm = self.a_plus * Fm_plus + self.a_minus * Fm_minus
 
+        return spin_to_cartesian(F0, Fp, Fm).reshape(*shape, 3)
+    
+    def H(self, rho=None, phi=None, z=0, *, x=None, y=None):
+        (rho_f, phi_f, z_f, shape, phi_phase, s_phase, z_phase, R0, Rp, Rm) = self._prepare_grid(
+            rho=rho, phi=phi, z=z, x=x, y=y
+        )
+        F0, c_plus, c_minus, phi_phase, s_phase, z_phase = self._spin_components('H', rho_f, phi_phase, s_phase, z_phase)
+        F0_plus = F0 * R0 * phi_phase * z_phase
+        Fp_plus = c_plus * Rp * np.conj(s_phase) * phi_phase * z_phase
+        Fm_plus = c_minus * Rm * s_phase * phi_phase * z_phase
+        F0_minus = -F0 * R0 * np.conj(phi_phase) * z_phase
+        Fp_minus = -c_minus * Rm * np.conj(s_phase) * np.conj(phi_phase) * z_phase
+        Fm_minus = -c_plus * Rp * s_phase * np.conj(phi_phase) * z_phase
+        F0 = self.a_plus * F0_plus + self.a_minus * F0_minus
+        Fp = self.a_plus * Fp_plus + self.a_minus * Fp_minus
+        Fm = self.a_plus * Fm_plus + self.a_minus * Fm_minus
+
+        return spin_to_cartesian(F0, Fp, Fm).reshape(*shape, 3)
+    
+    def gradE(self, rho=None, phi=None, z=0, *, x=None, y=None, coord="cartesian"):
+        return self._grad_field("E", rho=rho, phi=phi, z=z, x=x, y=y, coord=coord)
+
+    def gradH(self, rho=None, phi=None, z=0, *, x=None, y=None, coord="cartesian"):
+        return self._grad_field("H", rho=rho, phi=phi, z=z, x=x, y=y, coord=coord)
+    
     def Power(self, rho=None, phi=None, z=0, *, x=None, y=None,
             auto=None, extent_factor=8.0, N=1000, tol=1e-3, max_iter=8,
             expand_factor=1.5, cache=True, geometry="square"):
@@ -733,9 +701,6 @@ class GuidedMode:
 
         return P
 
-    
-
-
     def __repr__(self):
         return (
             f"<GuidedMode ℓ={self.ell}, m={self.m}, "
@@ -744,7 +709,7 @@ class GuidedMode:
         )
 
     # ------------------------------ labelling --------------------------------
-    def _mode_kind_hybrid(self, atol=1e-9):
+    def _mode_kind_hybrid(self):
         A, B = self.A, self.B
         s = np.sign(self.ell) * np.imag(A * np.conj(B))
         if s > 0:
@@ -819,8 +784,10 @@ class GuidedMode:
             S3 = (np.abs(self.a_plus) ** 2 - np.abs(self.a_minus) ** 2)/S0
             
         elif self.mode_type == "TE":
+            S0 = np.abs(self.a_plus) ** 2 + np.abs(self.a_minus) ** 2
             S1, S2, S3 = -1.0, 0.0, 0.0
         elif self.mode_type == "TM":
+            S0 = np.abs(self.a_plus) ** 2 + np.abs(self.a_minus) ** 2
             S1, S2, S3 = 1.0, 0.0, 0.0
 
         html = f"""

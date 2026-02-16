@@ -24,8 +24,6 @@ except ImportError:
     _HAS_REFRACTIVEINDEX = False
     RefractiveIndex = None
     NoExtinctionCoefficient = None
-
-
         
 class RefractiveIndexMaterial:
     def __init__(self, shelf, book, page, **ri_kwargs):
@@ -93,8 +91,8 @@ class StepIndexFibre:
         core_radius : float or Quantity[m]
         core, clad  : RefractiveIndexMaterial (highest precedence, per side)
         eps_*       : scalar or callable λ→ε(λ) (used if material not provided)
-        n_*         : scalar or callable λ→n(λ)  (used if neither material nor ε_* provided)
-        mu_*        : scalar or callable λ→μ(λ)
+        n_*         : scalar or callable λ→n(λ) (used if neither material nor ε_* provided)
+        mu_*        : scalar or callable λ→μ(λ) (default 1.0)
         exp_type    : passed to RefractiveIndexMaterial.get_eps when core/clad given
         real_eps_from_material : if True, use n^2 (real). If False and k is available in
                                  the database, use (n ± i k)^2 depending on exp_type.
@@ -549,6 +547,7 @@ class StepIndexFibre:
                 break
             ell += 1
         return ell - 1  # Last valid ell
+    
     def HE(self, ell, n, wl, **kwargs):
         """Return an HE mode (ell>0, odd m)."""
         # m = 2 * n - 1

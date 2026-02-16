@@ -144,3 +144,125 @@ def pretty_length(qty, digits=3):
     # fallback to metres
     unit_str = units.m.to_string('latex').replace('$', '')
     return rf"{qty.to_value(units.m):.{digits}g} \, {unit_str}"
+
+def repr_html_modes(modes):
+    import numpy as np
+    """
+    Return ONE HTML table for an iterable of GuidedMode objects,
+    using the same styling/columns as the single-row _repr_html_.
+    """
+    from .utils import _HAS_UNITS, wavelength_to_rgb, wavelength_band_label_nm
+
+    modes = [m for m in modes if m is not None]
+    if not modes:
+        return ""
+
+    # --- same swatch helper as in your single renderer ---
+    def _swatch(bg_css, label=None):
+        text = (label or "")
+        title = f' title="{label}"' if label else ""
+        return (
+            f'<span{title} style="display:inline-flex;align-items:center;justify-content:center;'
+            'width:1.5em;height:1.5em;margin-right:.4em;margin-bottom:0.3em;'
+            'border:1px solid rgba(0,0,0,.25);border-radius:2px;'
+            f'background:{bg_css};color:white;'
+            'font-size:clamp(0.45em, 0.55em, 0.65em);'
+            'font-weight:700;letter-spacing:.02em;vertical-align:middle;'
+            'overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">'
+            f'{text}'
+            '</span>'
+        )
+
+    rows = []
+    for m in modes:
+        # Wavelength + swatch
+        # try:
+        #     wl_nm = m.wavelength.to_value('nm') if _HAS_UNITS else float(m.wavelength) * 1e9
+        #     wl_str = f"{wl_nm:.2f}"
+        # except Exception:
+        #     wl_nm, wl_str = None, f"{m.wavelength:.2e}"
+        try:
+            wl_nm = m.wavelength.to_value('nm') if _HAS_UNITS else float(m.wavelength) * 1e9
+        except Exception:
+            wl_nm = float(m.wavelength) * 1e9
+
+        label, gray = wavelength_band_label_nm(wl_nm) if wl_nm is not None else (None, None)
+        if wl_nm is not None and 380 <= wl_nm <= 780:
+            R, G, B = wavelength_to_rgb(wl_nm)
+            swatch_html = _swatch(f"rgb({int(R*255)}, {int(G*255)}, {int(B*255)})")
+        elif label is not None:
+            swatch_html = _swatch(gray, label)
+        else:
+            swatch_html = ""
+
+        # Stokes
+        if getattr(m, "ell", 0) != 0 and hasattr(m, "a_plus") and hasattr(m, "a_minus"):
+            S0 = np.abs(m.a_plus)**2 + np.abs(m.a_minus)**2
+            S1 = 2 * np.real(m.a_plus * np.conj(m.a_minus))/S0
+            S2 = 2 * np.imag(m.a_plus * np.conj(m.a_minus))/S0
+            S3 = (np.abs(m.a_plus)**2 - np.abs(m.a_minus)**2)/S0
+        elif getattr(m, "ell", 0) == 0 and getattr(m, "mode_type", None) == "TE":
+            S0 = np.abs(m.a_plus)**2 + np.abs(m.a_minus)**2
+            S1, S2, S3 = -1.0, 0.0, 0.0
+        else:
+            S0 = np.abs(m.a_plus)**2 + np.abs(m.a_minus)**2
+            S1, S2, S3 = 1.0, 0.0, 0.0
+
+        rows.append(f"""
+        <tr>
+            <td style="text-align:center;">{m.mode_label()}</td>
+            <td class="num">{swatch_html}{wl_nm:.2f}</td>
+            <td class="num">{m.V:.2f}</td>
+            <td class="num">{m.neff:.4f}</td>
+            <td class="num">{S1:.2f}</td>
+            <td class="num">{S2:.2f}</td>
+            <td class="num">{S3:.2f}</td>
+            <td class="num">{S0:.2f}</td>
+        </tr>
+        """)
+
+    # one header, many rows
+    html = f"""
+    <div class="anafibre-guidedmode" aria-label="Guided mode summary"
+        style="color-scheme: light dark; --bg: Canvas; --fg: CanvasText;
+                --border: color-mix(in srgb, var(--fg) 18%, var(--bg));
+                --header: color-mix(in srgb, var(--fg) 8%, var(--bg));
+                --row: color-mix(in srgb, var(--fg) 4%, var(--bg));
+                font-variant-numeric: tabular-nums;">
+    <style>
+    .anafibre-guidedmode table {{
+        width: auto; background: var(--bg); color: var(--fg);
+        border: 1px solid var(--border); border-radius: 10px;
+        border-collapse: separate; border-spacing: 0; overflow: hidden;
+        box-shadow: 0 2px 10px color-mix(in srgb, var(--fg) 10%, transparent);
+    }}
+    .anafibre-guidedmode th, .anafibre-guidedmode td {{
+        padding: .55rem .5rem; vertical-align: middle;
+    }}
+    .anafibre-guidedmode thead th {{
+        background: var(--header); font-weight: 600;
+    }}
+    .anafibre-guidedmode td.num, .anafibre-guidedmode th.num {{ text-align: center; }}
+    .anafibre-guidedmode tbody tr:nth-child(odd) td {{ background: var(--row); }}
+    </style>
+
+    <table>
+    <thead>
+        <tr>
+        <th scope="col" style="text-align:center;">Mode</th>
+        <th scope="col" class="num">λ [nm]</th>
+        <th scope="col" class="num">V</th>
+        <th scope="col" class="num">n<sub>e</sub></th>
+        <th scope="col" class="num">s<sub>1</sub></th>
+        <th scope="col" class="num">s<sub>2</sub></th>
+        <th scope="col" class="num">s<sub>3</sub></th>
+        <th scope="col" class="num">S<sub>0</sub></th>
+        </tr>
+    </thead>
+    <tbody>
+        {''.join(rows)}
+    </tbody>
+    </table>
+    </div>
+    """
+    return html

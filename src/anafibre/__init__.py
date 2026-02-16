@@ -22,9 +22,10 @@ __license__ = "MIT"
 
 from .fibre import StepIndexFibre, RefractiveIndexMaterial
 from .fields import GuidedMode
+from .utils import repr_html_modes
 from IPython.display import display_html
 
 __all__ = ["StepIndexFibre", "GuidedMode", "RefractiveIndexMaterial"]
 
 def display_modes(*modes):
-    display_html(GuidedMode._repr_html_multi(modes), raw=True)
+    display_html(repr_html_modes(modes), raw=True)

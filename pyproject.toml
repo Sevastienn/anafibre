@@ -37,7 +37,7 @@ license-files = ["LICEN[CS]E*"]
 [project.optional-dependencies]
 units = ["astropy>=4.0.0"]
 refractiveindex = ["refractiveindex>=0.1.0"]
-all = ["anafibre_sevastien[units,refractiveindex]"]
+all = ["anafibre[units,refractiveindex]"]
 
 [project.urls]
 Homepage = "https://github.com/Sevastienn/anafibre"

@@ -131,6 +131,7 @@ def wavelength_band_label_nm(wl_nm):
 
         # Fallback
         return None, None
+
 def pretty_length(qty, digits=3):
     """
     Return a pure LaTeX fragment for a length Quantity (assumed in metres).
@@ -207,6 +208,9 @@ def repr_html_modes(modes):
         else:
             S0 = np.abs(m.a_plus)**2 + np.abs(m.a_minus)**2
             S1, S2, S3 = 1.0, 0.0, 0.0
+        
+        def fmt_signed(x):
+            return f"{x:+.2f}".replace("+", "\u2008")
 
         rows.append(f"""
         <tr>
@@ -214,10 +218,8 @@ def repr_html_modes(modes):
             <td class="num">{swatch_html}{wl_nm:.2f}</td>
             <td class="num">{m.V:.2f}</td>
             <td class="num">{m.neff:.4f}</td>
-            <td class="num">{S1:.2f}</td>
-            <td class="num">{S2:.2f}</td>
-            <td class="num">{S3:.2f}</td>
             <td class="num">{S0:.2f}</td>
+            <td class="num">({fmt_signed(S1)}, {fmt_signed(S2)}, {fmt_signed(S3)})</td>
         </tr>
         """)
 
@@ -250,13 +252,11 @@ def repr_html_modes(modes):
     <thead>
         <tr>
         <th scope="col" style="text-align:center;">Mode</th>
-        <th scope="col" class="num">λ [nm]</th>
-        <th scope="col" class="num">V</th>
-        <th scope="col" class="num">n<sub>e</sub></th>
-        <th scope="col" class="num">s<sub>1</sub></th>
-        <th scope="col" class="num">s<sub>2</sub></th>
-        <th scope="col" class="num">s<sub>3</sub></th>
-        <th scope="col" class="num">S<sub>0</sub></th>
+        <th scope="col" class="num"><i>λ</i> [nm]</th>
+        <th scope="col" class="num"><i>V</i></th>
+        <th scope="col" class="num"><i>n</i><sub>eff</sub></th>
+        <th scope="col" class="num"><i>S</i><sub>0</sub></th>
+        <th scope="col" class="num">(<i>S</i><sub>1</sub>, <i>S</i><sub>2</sub>, <i>S</i><sub>3</sub>) / <i>S</i><sub>0</sub></th>
         </tr>
     </thead>
     <tbody>

@@ -22,10 +22,14 @@ __license__ = "MIT"
 
 from .fibre import StepIndexFibre, RefractiveIndexMaterial
 from .fields import GuidedMode
+from .plotting import animate_fields_xy
 from .utils import repr_html_modes
-from IPython.display import display_html
+from IPython.display import display_html, HTML, display
 
-__all__ = ["StepIndexFibre", "GuidedMode", "RefractiveIndexMaterial"]
+__all__ = ["StepIndexFibre", "GuidedMode", "RefractiveIndexMaterial", "animate_fields_xy", "repr_html_modes", "display_modes", "display_anim"]
 
 def display_modes(*modes):
     display_html(repr_html_modes(modes), raw=True)
+
+def display_anim(anim):
+    display(HTML(anim.to_jshtml()))

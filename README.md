@@ -21,8 +21,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PyPI](https://img.shields.io/pypi/v/anafibre.svg)](https://pypi.org/project/anafibre/)
 [![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![arXiv](https://img.shields.io/badge/arXiv-2602.14930-B31B1B?logo=data:image/svg+xml;base64,PHN2ZyBpZD0ibG9nb21hcmsiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgdmlld0JveD0iMCAwIDE3LjczMiAyNC4yNjkiPjxnIGlkPSJ0aW55Ij48cGF0aCBkPSJNNTczLjU0OSwyODAuOTE2bDIuMjY2LDIuNzM4LDYuNjc0LTcuODRjLjM1My0uNDcuNTItLjcxNy4zNTMtMS4xMTdhMS4yMTgsMS4yMTgsMCwwLDAtMS4wNjEtLjc0OGgwYS45NTMuOTUzLDAsMCwwLS43MTIuMjYyWiIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoLTU2Ni45ODQgLTI3MS41NDgpIiBmaWxsPSIjYmRiOWI0Ii8+PHBhdGggZD0iTTU3OS41MjUsMjgyLjIyNWwtMTAuNjA2LTEwLjE3NGExLjQxMywxLjQxMywwLDAsMC0uODM0LS41LDEuMDksMS4wOSwwLDAsMC0xLjAyNy42NmMtLjE2Ny40LS4wNDcuNjgxLjMxOSwxLjIwNmw4LjQ0LDEwLjI0MmgwbC02LjI4Miw3LjcxNmExLjMzNiwxLjMzNiwwLDAsMC0uMzIzLDEuMywxLjExNCwxLjExNCwwLDAsMCwxLjA0LjY5QS45OTIuOTkyLDAsMCwwLDU3MSwyOTNsOC41MTktNy45MkExLjkyNCwxLjkyNCwwLDAsMCw1NzkuNTI1LDI4Mi4yMjVaIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSgtNTY2Ljk4NCAtMjcxLjU0OCkiIGZpbGw9IiNiMzFiMWIiLz48cGF0aCBkPSJNNTg0LjMyLDI5My45MTJsLTguNTI1LTEwLjI3NSwwLDBMNTczLjUzLDI4MC45bC0xLjM4OSwxLjI1NGEyLjA2MywyLjA2MywwLDAsMCwwLDIuOTY1bDEwLjgxMiwxMC40MTlhLjkyNS45MjUsMCwwLDAsLjc0Mi4yODIsMS4wMzksMS4wMzksMCwwLDAsLjk1My0uNjY3QTEuMjYxLDEuMjYxLDAsMCwwLDU4NC4zMiwyOTMuOTEyWiIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoLTU2Ni45ODQgLTI3MS41NDgpIiBmaWxsPSIjYmRiOWI0Ii8+PC9nPjwvc3ZnPg==)](https://arxiv.org/abs/2602.14930)
 [![ORCID](https://img.shields.io/badge/ORCID-0000--0003--3947--7634-A6CE39?logo=orcid&logoColor=white)](https://orcid.org/0000-0003-3947-7634)
-<!-- [![arXiv](https://img.shields.io/badge/arXiv-2512.01784-B31B1B?logo=data:image/svg+xml;base64,PHN2ZyBpZD0ibG9nb21hcmsiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgdmlld0JveD0iMCAwIDE3LjczMiAyNC4yNjkiPjxnIGlkPSJ0aW55Ij48cGF0aCBkPSJNNTczLjU0OSwyODAuOTE2bDIuMjY2LDIuNzM4LDYuNjc0LTcuODRjLjM1My0uNDcuNTItLjcxNy4zNTMtMS4xMTdhMS4yMTgsMS4yMTgsMCwwLDAtMS4wNjEtLjc0OGgwYS45NTMuOTUzLDAsMCwwLS43MTIuMjYyWiIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoLTU2Ni45ODQgLTI3MS41NDgpIiBmaWxsPSIjYmRiOWI0Ii8+PHBhdGggZD0iTTU3OS41MjUsMjgyLjIyNWwtMTAuNjA2LTEwLjE3NGExLjQxMywxLjQxMywwLDAsMC0uODM0LS41LDEuMDksMS4wOSwwLDAsMC0xLjAyNy42NmMtLjE2Ny40LS4wNDcuNjgxLjMxOSwxLjIwNmw4LjQ0LDEwLjI0MmgwbC02LjI4Miw3LjcxNmExLjMzNiwxLjMzNiwwLDAsMC0uMzIzLDEuMywxLjExNCwxLjExNCwwLDAsMCwxLjA0LjY5QS45OTIuOTkyLDAsMCwwLDU3MSwyOTNsOC41MTktNy45MkExLjkyNCwxLjkyNCwwLDAsMCw1NzkuNTI1LDI4Mi4yMjVaIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSgtNTY2Ljk4NCAtMjcxLjU0OCkiIGZpbGw9IiNiMzFiMWIiLz48cGF0aCBkPSJNNTg0LjMyLDI5My45MTJsLTguNTI1LTEwLjI3NSwwLDBMNTczLjUzLDI4MC45bC0xLjM4OSwxLjI1NGEyLjA2MywyLjA2MywwLDAsMCwwLDIuOTY1bDEwLjgxMiwxMC40MTlhLjkyNS45MjUsMCwwLDAsLjc0Mi4yODIsMS4wMzksMS4wMzksMCwwLDAsLjk1My0uNjY3QTEuMjYxLDEuMjYxLDAsMCwwLDU4NC4zMiwyOTMuOTEyWiIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoLTU2Ni45ODQgLTI3MS41NDgpIiBmaWxsPSIjYmRiOWI0Ii8+PC9nPjwvc3ZnPg==)](https://arxiv.org/abs/2512.01784) -->
+
 
 
 **Anafibre** is an analytical mode solver for cylindrical step-index optical fibres. It computes guided modes by solving dispersion relations and evaluating corresponding electromagnetic fields analytically.
@@ -57,69 +58,6 @@ pip install anafibre
   pip install "anafibre[all]"
   ```
 
-
-
-### From Source (development)
-
-```bash
-git clone https://github.com/Sevastienn/anafibre.git
-cd anafibre
-pip install -e .
-```
-<!-- 
-### Core dependencies
-
-- numpy >= 1.20.0
-- scipy >= 1.7.0
-- matplotlib >= 3.5.0
-- IPython >= 7.0.0
-
-### Optional extras
-- astropy >= 4.0.0 (for unit support) - install with `pip install anafibre[units]`
-- refractiveindex >= 0.1.0 (for refractive index database) - install with `pip install anafibre[refractiveindex]` -->
-
-
-<!-- 
-## Quick Start
-
-```python
-import numpy as np
-import anafibre as fib
-
-# Create a step-index fibre
-fibre = fib.StepIndexFibre(
-    core_radius=250e-9,
-    n_core=2.00,
-    n_clad=1.33
-)
-
-# Get fundamental mode (HE11) at 500 nm
-wl = 500e-9
-HE11 = fibre.HE(ell=1, n=1, wl=wl)
-
-# Try to get some higher-order modes:
-TM01 = HE21 = TE01 = EH11 = None
-try:
-    TM01 = fibre.TM(n=1, wl=wl)          
-    HE21 = fibre.HE(ell=2, n=1, wl=wl)   
-    TE01 = fibre.TE(n=1, wl=wl)          
-    EH11 = fibre.EH(ell=1, n=1, wl=wl)   
-except (ValueError, RuntimeError):
-    pass  # Some modes may not exist for this fibre
-
-# show only what we actually got
-fib.display_modes(*[m for m in (HE11, TM01, HE21, TE01, EH11) if m is not None])
-
-# Calculate field distributions
-mode = HE11  # Use the mode from above
-x = np.linspace(-2*fibre.core_radius, 2*fibre.core_radius, 100)
-y = np.linspace(-2*fibre.core_radius, 2*fibre.core_radius, 100)
-X, Y = np.meshgrid(x, y)
-
-E = mode.E(x=X, y=Y)  # Electric field
-H = mode.H(x=X, y=Y)  # Magnetic field
-``` -->
-
 ## Core API Overview
 
 Anafibre has two main objects:
@@ -128,8 +66,15 @@ Anafibre has two main objects:
 
 The typical workflow is:
 ```python
-fibre = StepIndexFibre(...)
-mode = fibre.HE(...)
+# Set up the fibre
+fibre = fib.StepIndexFibre(core_radius=250e-9, n_core=2.00, n_clad=1.33)
+# Set up the fundamental mode (here with x polarisation)
+HE11 = fibre.HE(ell=1, n=1, wl=700e-9, a_plus=1/np.sqrt(2), a_minus=1/np.sqrt(2))
+# Construct the grid
+x = np.linspace(-2*fibre.core_radius, 2*fibre.core_radius, 100)
+y = np.linspace(-2*fibre.core_radius, 2*fibre.core_radius, 100)
+X, Y = np.meshgrid(x, y)
+# Evaluate the field on the grid 
 E = mode.E(x=X, y=Y)
 ```
 
@@ -152,6 +97,12 @@ Defines the fibre geometry and material parameters and provides dispersion utili
 
   ```python
   fibre = fib.StepIndexFibre(core_radius=250e-9, n_core=2.00, n_clad=1.33)
+
+  # Or with astropy.units imported as u and with refractiveindex installed:
+  fibre = fib.StepIndexFibre(
+    core_radius = 250*u.nm,
+    core = fib.RefractiveIndexMaterial('main','Si3N4','Luke'),
+    clad = fib.RefractiveIndexMaterial('main','H2O','Hale'))
   ```
 
 #### Provides
@@ -164,27 +115,36 @@ Defines the fibre geometry and material parameters and provides dispersion utili
   ```
   Each returns a `GuidedMode` object.
 
-- **Dispersion utilities** to find *V, b, k<sub>z </sub>,*&nbsp;and *n*<sub>eff</sub>
+- **Dispersion utilities** to find *V, b, k<sub>z </sub>,*&nbsp;and *n*<sub>eff</sub> and the dispersion function *F* for given parameters
   ```python
   fibre.V(wavelength)
-  fibre.b(ell, m, V=..., wavelength=...)
+  fibre.b(ell, m, V=..., wavelength=..., mode_type=...)
   fibre.kz(...)
   fibre.neff(...)
+  fibre.F(ell, b, V=..., wavelength=..., mode_type=...)
+  ```
+
+- **Geometry and material properties** as attributes
+  ```python
+  fibre.core_radius
+  fibre.n_core(wavelength)
+  fibre.n_clad(...)
+  fibre.eps_core(...)
+  fibre.eps_clad(...)
+  fibre.mu_core(...)
+  fibre.mu_clad(...)
+
+  ```
+
+- **Maximum mode order** supported for a given wavelength
+  ```python
+  fibre.ell_max(wavelength, m=1, mode_type=...)
+  fibre.m_max(ell, wavelength, mode_type=...)
   ```
 ---
 ### `GuidedMode`
 
 Represents a guided mode with methods to calculate fields and properties. It is created using `StepIndexFibre` mode constructors.
-
-<!-- Example:
-```python
-# Create the fundamental modes with different polarisations:
-HE11L = fibre.HE(ell=1, n=1, wl=500e-9, a_plus=0, a_minus=1)
-HE11x = fibre.HE(ell=1, n=1, wl=500e-9, a_plus=1/np.sqrt(2), a_minus=1/np.sqrt(2))
-HE11y = fibre.HE(ell=1, n=1, wl=500e-9, a_plus=1j/np.sqrt(2), a_minus=-1j/np.sqrt(2))
-``` -->
-
-
 
 #### Provides
 - Field evaluation in (ρ,ϕ,z) or (x,y,z) coordinates, when z is not provided z=0 is assumed
@@ -194,7 +154,7 @@ HE11y = fibre.HE(ell=1, n=1, wl=500e-9, a_plus=1j/np.sqrt(2), a_minus=-1j/np.sqr
   E = mode.E(x=X, y=Y, z=Z)
   H = mode.H(x=X, y=Y, z=Z)
   ```
- Both return arrays with a shape (..., 3) corresponding to the Cartesian vector components.
+ Both return arrays with a shape (..., 3) corresponding to the Cartesian vector components. Note that if a grid is passed to the function then it is cached, so subsequent calls with the same grid (for example to get magnetic field) will be much faster.
 - Jacobians (gradients) of the fields
   ```python
   J_E = mode.gradE(rho=Rho, phi=Phi, z=Z)
@@ -210,18 +170,46 @@ HE11y = fibre.HE(ell=1, n=1, wl=500e-9, a_plus=1j/np.sqrt(2), a_minus=-1j/np.sqr
 
 
 ### Visualisation
-The package ships with a built-in plotting utility that creates time-resolved animations of the electromagnetic field in the transverse cross-section of the fibre:
+The package ships with a built-in plotting utility that creates time-resolved animations of the electromagnetic field in the transverse cross-section of the fibre. There are two options for using it:
+- Option A − Passing the mode(s) with weights to the `animate_fields_xy` function directly:
+  ```python
+  anim = fib.animate_fields_xy(
+        modes=None,            # GuidedMode or list[GuidedMode]
+        weights=None,          # complex or list[complex] (amplitudes/relative phases), default 1
+        n_radii=2.0,           # grid half-size in units of core radius (when building grid)
+        Np=200,                # grid resolution per axis
+        ...)
+  ```
+- Option B − Passing fields with their own ω:
+  ```python
+  anim = fib.animate_fields_xy(
+        fields=None,           # list of tuples (E, H, omega) with E/H phasors on same X,Y grid
+        X=None, Y=None,        # grid for Option B (required if fields given)
+        z=0.0,                 # z-slice to evaluate modes at (ignored if fields given)
+        ...)
+  ```
+Whichever way you choose, the resulting `anim` object is a standard [Matplotlib animation](https://matplotlib.org/stable/api/_as_gen/matplotlib.animation.Animation.html) and can be displayed in Jupyter notebooks or saved to file. One can also specify which field components to show (E, H, or both) and figure size instead of `...` in the above snippets.
+  ```python
+  anim = fib.animate_fields_xy(
+        ...,
+        show=("E", "H"),       # any subset of {"E","H"}
+        n_frames=60,           # number of frames in the animation 
+        interval=50,           # delay between frames in ms 
+        figsize=(8, 4.5))      # figure size in inches (width, height)
+  ```
+Finally, the animation can be displayed in a Jupyter notebook using the `display_anim` helper function:
 ```python
-from anafibre.plotting import animate_fields_xy
-from IPython.display import HTML
-anim = animate_fields_xy(modes=mode, show=("E",),figsize=(5,5))
-display(HTML(anim.to_jshtml()))
+fib.display_anim(anim)
+```
+or saved to file using the standard Matplotlib API:
+```python 
+anim.save("mode_animation.mp4", writer="ffmpeg", fps=30)
 ```
 
 
 ## Citation
 
-If you use Anafibre in your research, please cite:
+If Anafibre contributes to work that you publish, please cite the software and the associated paper:
 
 ```bibtex
 @misc{anafibre2026,
@@ -231,4 +219,14 @@ If you use Anafibre in your research, please cite:
   note    = {{Python package}},
   url     = {https://github.com/Sevastienn/anafibre},
   version = {0.1.0}}
+```
+```bibtex
+@misc{golat2026anafibre,
+  title         = {A robust and efficient method to calculate electromagnetic modes on a cylindrical step-index nanofibre}, 
+  author        = {Sebastian Golat and Francisco J. Rodríguez-Fortuño},
+  year          = {2026},
+  eprint        = {2602.14930},
+  archivePrefix = {arXiv},
+  primaryClass  = {physics.optics},
+  url           = {https://arxiv.org/abs/2602.14930}}
 ```

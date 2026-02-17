@@ -699,6 +699,22 @@ class GuidedMode:
         return P
 
     # ------------------------------ labelling --------------------------------
+    def mode_label(self):
+        if self.ell == 0:
+            mt = (self.mode_type or "").upper()
+            if mt not in {"TE", "TM"}:
+                mt = "TE" if abs(self.A) < 1e-15 else ("TM" if abs(self.B) < 1e-15 else "TE")
+                n = self._radial_n()
+            n = self.m
+            return f"{mt}<sub>0{n}</sub>"
+        else:
+            mt = (self.mode_type or "").upper()
+            if mt not in {"HE", "EH"}:
+                mt = self._mode_kind_hybrid()
+                n = self._radial_n()
+            n = self._radial_n()
+            return f"{mt}<sub>{self.ell}{n}</sub>"
+        
     def _mode_kind_hybrid(self):
         A, B = self.A, self.B
         s = np.sign(self.ell) * np.imag(A * np.conj(B))
@@ -718,26 +734,14 @@ class GuidedMode:
                 return self.m
         return (self.m + 1) // 2
 
-    def mode_label(self):
-        if self.ell == 0:
-            mt = (self.mode_type or "").upper()
-            if mt not in {"TE", "TM"}:
-                mt = "TE" if abs(self.A) < 1e-15 else ("TM" if abs(self.B) < 1e-15 else "TE")
-                n = self._radial_n()
-            n = self.m
-            return f"{mt}<sub>0{n}</sub>"
-        else:
-            mt = (self.mode_type or "").upper()
-            if mt not in {"HE", "EH"}:
-                mt = self._mode_kind_hybrid()
-                n = self._radial_n()
-            n = self._radial_n()
-            return f"{mt}<sub>{self.ell}{n}</sub>"
-
     def __repr__(self):
+        S0 = np.abs(self.a_plus) ** 2 + np.abs(self.a_minus) ** 2
+        S1 = 2 * np.real(self.a_plus * np.conj(self.a_minus))/S0
+        S2 = 2 * np.imag(self.a_plus * np.conj(self.a_minus))/S0
+        S3 = (np.abs(self.a_plus) ** 2 - np.abs(self.a_minus) ** 2)/S0
         return (
-            f"<GuidedMode ℓ={self.ell}, m={self.m}, "
-            f"λ={self.wavelength:.2e}, V={self.V:.2e}, neff={self.neff:.6f}, "
+            f"<GuidedMode {self.mode_type} (ℓ={self.ell}, n={self.m}), "
+            f"λ={self.wavelength:.2e}, V={self.V:.2f}, neff={self.neff:.4f}, (S₁,S₂,S₃) = {S0:.2f} · ({S1:.2f}, {S2:.2f}, {S3:.2f})>"
             # f"A={self.A:.3f}, B={self.B:.3f}>"
         )
     # ------------------------------ rich display -----------------------------
@@ -785,6 +789,8 @@ class GuidedMode:
         elif self.mode_type == "TM":
             S0 = np.abs(self.a_plus) ** 2 + np.abs(self.a_minus) ** 2
             S1, S2, S3 = 1.0, 0.0, 0.0
+        def fmt_signed(x):
+            return f"{x:+.2f}".replace("+", "\u2008")
 
         html = f"""
         <div class="anafibre-guidedmode" aria-label="Guided mode summary"
@@ -825,15 +831,11 @@ class GuidedMode:
             <thead>
             <tr>
                 <th scope="col" style="text-align:center;">Mode</th>
-                <!--<th scope="col" style="text-align:center;">ℓ</th>
-                <th scope="col" style="text-align:center;">m</th> -->
-                <th scope="col" class="num">λ [nm]</th>
-                <th scope="col" class="num">V</th>
-                <th scope="col" class="num">n<sub>e</sub></th>
-                <th scope="col" class="num">s<sub>1</sub></th>
-                <th scope="col" class="num">s<sub>2</sub></th>
-                <th scope="col" class="num">s<sub>3</sub></th>
-                <th scope="col" class="num">S<sub>0</sub></th>
+                <th scope="col" class="num"><i>λ</i> [nm]</th>
+                <th scope="col" class="num"><i>V</i></th>
+                <th scope="col" class="num"><i>n</i><sub>eff</sub></th>
+                <th scope="col" class="num"><i>S</i><sub>0</sub></th>
+                <th scope="col" class="num">(<i>S</i><sub>1</sub>, <i>S</i><sub>2</sub>, <i>S</i><sub>3</sub>) / <i>S</i><sub>0</sub></th>
             </tr>
             </thead>
             <tbody>
@@ -844,10 +846,8 @@ class GuidedMode:
                 <td class="num">{swatch_html}{wl_nm:.2f}</td>
                 <td class="num">{self.V:.2f}</td>
                 <td class="num">{self.neff:.4f}</td>
-                <td class="num">{S1:.2f}</td>
-                <td class="num">{S2:.2f}</td>
-                <td class="num">{S3:.2f}</td>
                 <td class="num">{S0:.2f}</td>
+                <td class="num">({fmt_signed(S1)}, {fmt_signed(S2)}, {fmt_signed(S3)})</td>
             </tr>
             </tbody>
         </table>

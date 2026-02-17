@@ -30,7 +30,6 @@ from .utils import units, _HAS_UNITS, _strip_unit
 from .dispersion import b_to_neff, b_to_kz, _wDlnK
 import warnings
 
-
 # ---------------------------- small helpers ---------------------------------
 
 def spin_to_cartesian(F0, Fp, Fm):
@@ -38,7 +37,6 @@ def spin_to_cartesian(F0, Fp, Fm):
     Ey = 1j * (Fp - Fm) / np.sqrt(2)
     Ez = F0
     return np.stack([Ex, Ey, Ez], axis=-1)
-
 
 def cartesian_to_cylindrical(F_cart, phi):
     Fx = F_cart[..., 0]
@@ -48,7 +46,6 @@ def cartesian_to_cylindrical(F_cart, phi):
     F_phi = -Fx * np.sin(phi) + Fy * np.cos(phi)
     return np.stack([F_rho, F_phi, Fz], axis=-1)
 
-
 def cylindrical_to_cartesian(F_cyl, phi):
     F_rho = F_cyl[..., 0]
     F_phi = F_cyl[..., 1]
@@ -56,7 +53,6 @@ def cylindrical_to_cartesian(F_cyl, phi):
     Fx = F_rho * np.cos(phi) - F_phi * np.sin(phi)
     Fy = F_rho * np.sin(phi) + F_phi * np.cos(phi)
     return np.stack([Fx, Fy, Fz], axis=-1)
-
 
 def format_complex_auto(z, tol=1e-14):
     """Format complex/Quantity like Python default, but omit near-zero parts."""
@@ -72,11 +68,9 @@ def format_complex_auto(z, tol=1e-14):
     else:
         return f"{z.real:.3f} + {z.imag:.3f} i{unit_str}"
 
-
 class ModeNotFoundError(RuntimeError):
     """Raised when the requested guided mode does not exist."""
     pass
-
 
 # ---------------------------- core class ------------------------------------
 
@@ -113,7 +107,7 @@ class GuidedMode:
         self.a_minus = complex(a_minus)
 
         self.V = fibre.V(wavelength)
-        self.b = fibre.b(ell, m, wavelength=self.wavelength, mode_type=mode_type, N_b=N_b)[0]
+        self.b = fibre.b(ell, m, wavelength=self.wavelength, mode_type=mode_type, N_b=N_b)
         if np.isnan(self.b) or not (0 < self.b < 1):
             raise ModeNotFoundError(
                 f"Mode (ℓ={ell}, m={m}) does not exist at λ={wavelength}."
@@ -187,12 +181,16 @@ class GuidedMode:
             return ("cyl", fr, fphi, round(z_fp, 12))
 
     # -------------------------- amplitudes/normalisation ---------------------
-    def _power_normalisation(self, A, B):
+    def sigma(self, A=None, B=None):
         from .dispersion import _wDlnK
         fibre = self.fibre
         ell = int(abs(self.ell))
         V = self.V
         wl = self.wavelength
+        if A is None:
+            A = self.A
+        if B is None:
+            B = self.B
         k0 = self.k0
         kz = self.kz
         a = fibre.core_radius
@@ -225,15 +223,14 @@ class GuidedMode:
         alpha2_plus = (eps2 * np.abs(A) ** 2 + mu2 * np.abs(B) ** 2) / (np.abs(A) ** 2 + np.abs(B) ** 2)
         alpha_minus = (np.imag(A * np.conj(B))) / (np.abs(A)**2 + np.abs(B)**2)
 
-        term1 = a**2 *(kz * k0) / u**2 * alpha1_plus * I1_plus
-        term2 = a**2 *(kz**2 + k1**2) / u**2 * alpha_minus * I1_minus
-        term3 = a**2 *(kz * k0) / w**2 * alpha2_plus * I2_plus
-        term4 = a**2 *(kz**2 + k2**2) / w**2 * alpha_minus * I2_minus
+        term1 = (kz * k0) / u**2 * alpha1_plus * I1_plus
+        term2 = (kz**2 + k1**2) / u**2 * alpha_minus * I1_minus
+        term3 = (kz * k0) / w**2 * alpha2_plus * I2_plus
+        term4 = (kz**2 + k2**2) / w**2 * alpha_minus * I2_minus
 
-        sigma = c0 * np.pi * a**2 * (term1 + term2 + term3 + term4)
+        sigma = np.pi * a**4 * (term1 + term2 + term3 + term4)
 
-        N = 1.0 / np.sqrt(sigma)
-        return N
+        return sigma
 
     def _compute_amplitudes(self, Normalise=True):
         fibre = self.fibre
@@ -280,7 +277,7 @@ class GuidedMode:
             A = 1 / np.sqrt(1 + np.abs(nu)**2)
             B = nu * A
 
-        N = self._power_normalisation(A, B) if Normalise else 1.0
+        N = 1/np.sqrt(c0 * self.sigma(A, B)) if Normalise else 1.0
         return N*A, N*B
 
     # --------------------------- radial functions ----------------------------
@@ -701,13 +698,6 @@ class GuidedMode:
 
         return P
 
-    def __repr__(self):
-        return (
-            f"<GuidedMode ℓ={self.ell}, m={self.m}, "
-            f"λ={self.wavelength:.2e}, V={self.V:.2e}, neff={self.neff:.6f}, "
-            # f"A={self.A:.3f}, B={self.B:.3f}>"
-        )
-
     # ------------------------------ labelling --------------------------------
     def _mode_kind_hybrid(self):
         A, B = self.A, self.B
@@ -741,9 +731,15 @@ class GuidedMode:
             if mt not in {"HE", "EH"}:
                 mt = self._mode_kind_hybrid()
                 n = self._radial_n()
-            n = self.m
+            n = self._radial_n()
             return f"{mt}<sub>{self.ell}{n}</sub>"
 
+    def __repr__(self):
+        return (
+            f"<GuidedMode ℓ={self.ell}, m={self.m}, "
+            f"λ={self.wavelength:.2e}, V={self.V:.2e}, neff={self.neff:.6f}, "
+            # f"A={self.A:.3f}, B={self.B:.3f}>"
+        )
     # ------------------------------ rich display -----------------------------
     def _repr_html_(self):
         from .utils import _HAS_UNITS, wavelength_to_rgb, wavelength_band_label_nm

@@ -350,7 +350,6 @@ def add_visible_spectrum(ax, position=[0, 0, 1, 0.01], wavelengths=np.linspace(4
     ax2.set_yticks([])
     ax2.axis('off')
 
-
 def plot_nu_vs_V(
     fibre, ell, m, *, Vmin=0.0, Vmax=10.0, Npoints=400, mode_type=None,
     ax=None, show=('real', 'imag'), title=None
@@ -397,7 +396,6 @@ def plot_nu_vs_V(
     plt.tight_layout()
     return ax
 
-
 def plot_sigma_vs_V(
     fibre, ell, m, *, Vmin=0.0, Vmax=10.0, Npoints=400, mode_type=None,
     ax=None, title=None
@@ -428,7 +426,6 @@ def plot_sigma_vs_V(
     ax.legend()
     plt.tight_layout()
     return ax
-
 
 def plot_xy_vector_field(
     X, Y, F, ax=None, scale="auto", zscale=None, cmap='RdBu_r', stride=4, title=None,
@@ -1003,6 +1000,7 @@ def animate_fields_xy(
     # --- Option B: give fields with their own ω ---
     fields=None,           # list of tuples (E, H, omega) with E/H phasors on same X,Y grid
     X=None, Y=None,        # grid for Option B (required if fields given)
+    z=0.0,                 # z-slice to evaluate modes at (ignored if fields given)
 
     # --- Plot controls ---
     show=("E", "H"),       # any subset of {"E","H"}
@@ -1105,8 +1103,8 @@ def animate_fields_xy(
 
         # Evaluate each mode on the same grid
         for m, w in zip(modes, weights):
-            E = np.asarray(m.E(x=X, y=Y)) * w
-            H = np.asarray(m.H(x=X, y=Y)) * w
+            E = np.asarray(m.E(x=X, y=Y, z=z)) * w
+            H = np.asarray(m.H(x=X, y=Y, z=z)) * w
 
             wl = m.wavelength  # maybe Quantity (e.g. nm)
             wl_m = float(wl.to_value(units.m)) if (_HAS_UNITS and hasattr(wl, "unit")) else float(wl)

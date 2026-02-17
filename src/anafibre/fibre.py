@@ -140,7 +140,6 @@ class StepIndexFibre:
         self.eps_core = _pick_eps("core", core, eps_core, n_core, self.mu_core)
         self.eps_clad = _pick_eps("clad", clad, eps_clad, n_clad, self.mu_clad)
 
-
     def _eval(self, val, wavelength):
         if callable(val):
             return val(wavelength)
@@ -290,11 +289,6 @@ class StepIndexFibre:
             out[it.multi_index] = solve_one(float(v))
         return out
 
-    def __repr__(self):
-        return (f"StepIndexFibre(core_radius={self.core_radius:.3e}, "
-                f"eps_core={self.eps_core}, eps_clad={self.eps_clad}, "
-                f"mu_core={self.mu_core}, mu_clad={self.mu_clad})")
-
     def b(self, ell, m, V=None, wavelength=None, mode_type=None,
           N_b=2000, tol=1e-15, complex_tol=1e-8, maxiter=100):
         if V is not None:
@@ -303,7 +297,6 @@ class StepIndexFibre:
             return find_b_of_V(self, ell, m, wavelength=wavelength, mode_type=mode_type, N_b=N_b, tol=tol, complex_tol=complex_tol, maxiter=maxiter)
         else:
             raise ValueError("Specify either V or wavelength.")
-        
 
     def neff(self, ell, m, V=None, wavelength=None, mode_type=None, **kwargs):
         if wavelength is not None:
@@ -525,11 +518,17 @@ class StepIndexFibre:
         """
         Return the maximum allowed radial mode number m for given ell and V.
         """
+        def _is_guided_root(b_val):
+            if not np.isfinite(b_val):
+                return False
+            b_re = float(np.real(b_val))
+            b_im = float(np.imag(b_val))
+            return (0 < b_re < 1) and (abs(b_im) <= complex_tol)
+
         m = 1
         while True:
             b = self.b(ell, m, wavelength=wavelength, mode_type=mode_type, N_b=N_b, tol=tol, complex_tol=complex_tol, maxiter=maxiter)
-            # If b is nan, not a valid solution: break
-            if np.isnan(b) or not (0 < b < 1):
+            if not _is_guided_root(b):
                 break
             m += 1
         return m - 1  # The last valid one
@@ -540,24 +539,48 @@ class StepIndexFibre:
         By default, checks for fundamental radial mode (m=1) for increasing ell.
         ell_max_search is a safety limit to prevent infinite loops.
         """
-        ell = 0
-        while ell < ell_max_search:
+        def _is_guided_root(b_val):
+            if not np.isfinite(b_val):
+                return False
+            b_re = float(np.real(b_val))
+            b_im = float(np.imag(b_val))
+            return (0 < b_re < 1) and (abs(b_im) <= complex_tol)
+
+        def _has_mode(ell):
+            if ell == 0 and mode_type is None:
+                # For ell=0, TE/TM may not both exist; accept either.
+                b_te = self.b(0, m, wavelength=wavelength, mode_type="TE", N_b=N_b, tol=tol, complex_tol=complex_tol, maxiter=maxiter)
+                b_tm = self.b(0, m, wavelength=wavelength, mode_type="TM", N_b=N_b, tol=tol, complex_tol=complex_tol, maxiter=maxiter)
+                return _is_guided_root(b_te) or _is_guided_root(b_tm)
             b = self.b(ell, m, wavelength=wavelength, mode_type=mode_type, N_b=N_b, tol=tol, complex_tol=complex_tol, maxiter=maxiter)
-            if np.isnan(b) or not (0 < b < 1):
+            return _is_guided_root(b)
+
+        max_valid_ell = -1
+        found_positive_ell = False
+
+        for ell in range(ell_max_search):
+            has_mode = _has_mode(ell)
+            if has_mode:
+                max_valid_ell = ell
+                if ell > 0:
+                    found_positive_ell = True
+            elif ell > 0 and found_positive_ell:
+                # For fixed wavelength and m, guided existence is monotonic in ell.
                 break
-            ell += 1
-        return ell - 1  # Last valid ell
+
+        return max_valid_ell
     
+    # -------------------------- mode construction ----------------------------
     def HE(self, ell, n, wl, **kwargs):
         """Return an HE mode (ell>0, odd m)."""
-        # m = 2 * n - 1
-        return GuidedMode(self, ell=ell, m=n, wavelength=wl,
+        m = 2 * n - 1
+        return GuidedMode(self, ell=ell, m=m, wavelength=wl,
                           mode_type="HE", **kwargs)
 
     def EH(self, ell, n, wl, **kwargs):
         """Return an EH mode (ell>0, even m)."""
-        # m = 2 * n
-        return GuidedMode(self, ell=ell, m=n, wavelength=wl,
+        m = 2 * n
+        return GuidedMode(self, ell=ell, m=m, wavelength=wl,
                           mode_type="EH", **kwargs)
 
     def TE(self, n, wl, **kwargs):
@@ -569,3 +592,8 @@ class StepIndexFibre:
         """Return a TM₀m mode (ell=0)."""
         return GuidedMode(self, ell=0, m=n, wavelength=wl,
                           mode_type="TM", **kwargs)
+    
+    def __repr__(self):
+        return (f"StepIndexFibre(core_radius={self.core_radius:.3e}, "
+                f"eps_core={self.eps_core}, eps_clad={self.eps_clad}, "
+                f"mu_core={self.mu_core}, mu_clad={self.mu_clad})")

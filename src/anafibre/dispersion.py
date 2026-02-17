@@ -11,6 +11,27 @@ from scipy.special import jv, jvp, kv, kvp, kve
 from scipy.optimize import root_scalar, root
 from .utils import units, _HAS_UNITS, _strip_unit
 
+def _dedupe_complex_roots(roots, tol=1e-7):
+    uniq = []
+    for r in roots:
+        if not any(abs(r - u) < tol for u in uniq):
+            uniq.append(r)
+    return uniq
+
+def _candidate_seeds_from_absF(Ffun, bs, q=0.08):
+    # local minima of |F| on real b-axis
+    vals = np.array([abs(Ffun(float(b))) for b in bs], dtype=float)
+    seeds = []
+    for i in range(1, len(bs) - 1):
+        if vals[i] <= vals[i - 1] and vals[i] <= vals[i + 1]:
+            seeds.append(float(bs[i]))
+    if not seeds:
+        seeds = [float(bs[np.argmin(vals)])]
+    # keep best fraction only
+    seeds = sorted(seeds, key=lambda x: abs(Ffun(x)))
+    keep = max(1, int(np.ceil(q * len(seeds))))
+    return seeds[:keep]
+
 def _wDlnK(ell, w):
         # w = np.asarray(w)
         ell = abs(int(ell))  # K_{-nu} = K_{nu}
@@ -63,7 +84,7 @@ def F_dispersion(fibre, ell, b, V=None, wavelength=None, mode_type=None):
     Jp = jvp(ell, u)
 
     wDlnK = _wDlnK(ell, w)
-    wDlnK[w < np.finfo(float).eps] = np.nan
+    wDlnK[np.abs(w) < np.finfo(float).eps] = np.nan
     
     phi_epsJ = eps1 * (u * b * Jp) + eps2 * ((1-b) * wDlnK * J)
     phi_muJ  = mu1  * (u * b * Jp) + mu2  * ((1-b) * wDlnK * J)
@@ -82,9 +103,8 @@ def F_dispersion(fibre, ell, b, V=None, wavelength=None, mode_type=None):
     else:
         return (phi_epsJ * phi_muJ - J ** 2 * (ell * ne) ** 2)/ (ell * ell)*(b*(1-b))
 
-
-def find_b_of_V(fibre, ell, m, V=None, wavelength=None, mode_type=None, N_b=2000, tol=np.nextafter(0, 1), complex_tol=1e-8, maxiter=100):
-    # scalar_input = np.isscalar(V) or np.isscalar(wavelength)
+def find_b_of_V(fibre, ell, m, V=None, wavelength=None, mode_type=None, N_b=2000, tol=np.nextafter(0, 1), complex_tol=1e-8, maxiter=200, return_complex=False):
+    scalar_input = np.isscalar(V) or np.isscalar(wavelength)
 
     if V is not None:
         arr = np.atleast_1d(V)
@@ -94,88 +114,65 @@ def find_b_of_V(fibre, ell, m, V=None, wavelength=None, mode_type=None, N_b=2000
     else:
         raise ValueError("Specify either V or wavelength.")
 
-    # V_arr = np.atleast_1d(V)
-    out = np.full_like(arr, np.nan, dtype=float)
-    bs = np.linspace(0, 1, N_b)
+    any_complex = False
+    out = np.full(arr.shape, np.nan + 0j, dtype=complex)
+    bs = np.linspace(1e-9, 1 - 1e-9, N_b)
 
-    if ell != 0 and mode_type is not None:
-        mt = str(mode_type).strip().lower()
-        if mt == "he":
-            # m_in is radial index n → odd root index
-            m = 2*int(m) - 1
-        if mt == "eh":
-            # m_in is radial index n → even root index
-            m = 2*int(m)
-
-    for i, arri in enumerate(arr): 
-        if V is not None:
-            def Ffun(bb):
-                return F_dispersion(fibre, ell=ell, b=bb, V=arri, mode_type=mode_type)
-        elif wavelength is not None:
-            def Ffun(bb):
-                return F_dispersion(fibre, ell=ell, b=bb, wavelength=arri, mode_type=mode_type)
-        else:
-            raise ValueError("Specify either V or wavelength.")
+    for i, arri in enumerate(arr):
+        Ffun = (lambda bb: F_dispersion(fibre, ell=ell, b=bb, V=arri, mode_type=mode_type)) \
+               if V is not None else \
+               (lambda bb: F_dispersion(fibre, ell=ell, b=bb, wavelength=arri, mode_type=mode_type))
 
         Fvals = Ffun(bs)
-        is_real = np.all(np.isreal(Fvals)) and np.all(np.abs(np.imag(Fvals)) < 1e-12)
-        idx = np.where(np.sign(np.real(Fvals[:-1])) * np.sign(np.real(Fvals[1:])) < 0)[0]
+        effectively_real = np.all(np.abs(np.imag(Fvals)) < 1e-12)
+
         roots = []
-
-        for j in idx:
-            a, b_hi = bs[j], bs[j + 1]
-            real_root = None
-            try:
-                sol_real = root_scalar(lambda bb: np.real(Ffun(bb)), bracket=[a, b_hi], method='brentq', xtol=tol)
-                if sol_real.converged and a <= sol_real.root <= b_hi:
-                    real_root = sol_real.root
-            except Exception:
-                pass
-
-            if is_real and real_root is not None:
-                roots.append(real_root)
-            elif real_root is not None:
-                def real_obj(bb_arr):
-                    bb_scalar = float(np.atleast_1d(bb_arr).flatten()[0])
-                    val = Ffun(bb_scalar)
-                    return [np.real(val), np.imag(val)]
-
+        if effectively_real:
+            idx = np.where(np.sign(np.real(Fvals[:-1])) * np.sign(np.real(Fvals[1:])) < 0)[0]
+            for j in idx:
+                a, b_hi = bs[j], bs[j + 1]
                 try:
-                    sol = root(real_obj, [real_root], method='hybr', tol=complex_tol, options={'maxfev': maxiter})
-                    bb_sol = sol.x[0]
-                    if sol.success and (a <= bb_sol <= b_hi):
-                        val = Ffun(bb_sol)
-                        if np.abs(val) < complex_tol:
-                            roots.append(bb_sol)
+                    sol = root_scalar(lambda bb: np.real(Ffun(bb)), bracket=[a, b_hi], method="brentq", xtol=tol)
+                    if sol.converged:
+                        roots.append(complex(sol.root, 0.0))
                 except Exception:
-                    continue
-            else:
-                bb0 = 0.5 * (a + b_hi)
-                def real_obj(bb_arr):
-                    bb_scalar = float(np.atleast_1d(bb_arr).flatten()[0])
-                    val = Ffun(bb_scalar)
-                    return [np.real(val), np.imag(val)]
+                    pass
+        else:
+            any_complex = True
+            seeds = _candidate_seeds_from_absF(Ffun, bs)
 
+            def sys(xy):
+                b = xy[0] + 1j * xy[1]
+                v = Ffun(b)
+                return np.array([np.real(v), np.imag(v)], dtype=float)
+
+            for br0 in seeds:
                 try:
-                    sol = root(real_obj, [bb0], method='hybr', tol=complex_tol, options={'maxfev': maxiter})
-                    bb_sol = sol.x[0]
-                    if sol.success and (a <= bb_sol <= b_hi):
-                        val = Ffun(bb_sol)
-                        if np.abs(val) < complex_tol:
-                            roots.append(bb_sol)
+                    sol = root(sys, x0=np.array([br0, 0.0]), method="hybr",
+                               tol=complex_tol, options={"maxfev": maxiter})
+                    if not sol.success:
+                        continue
+                    bsol = sol.x[0] + 1j * sol.x[1]
+                    if (0 < np.real(bsol) < 1) and (abs(Ffun(bsol)) < complex_tol):
+                        roots.append(bsol)
                 except Exception:
-                    continue
+                    pass
 
-        roots_sorted = sorted(roots, reverse=True)
-        index = m - 1  # 1-based indexing!
-        if 0 <= index < len(roots_sorted):
-            out[i] = roots_sorted[index]
+        roots = _dedupe_complex_roots(roots, tol=1e-7)
+        roots = sorted(roots, key=lambda z: np.real(z), reverse=True)
+        idx_mode = m - 1
+        if 0 <= idx_mode < len(roots):
+            out[i] = roots[idx_mode]
 
-    return out[0] if np.isscalar(V) else out
-    # if scalar_input:
-    #     return float(out.flat[0])
-    # return out
+    if scalar_input:
+        val = out.flat[0]
+        if (not return_complex) and (abs(np.imag(val)) < 1e-14):
+            return float(np.real(val))
+        return val
 
+    if (not return_complex) and (not any_complex):
+        return np.real(out)
+    return out
 
 def b_to_neff(fibre, b, wavelength):
     n1 = fibre.n_core(wavelength)

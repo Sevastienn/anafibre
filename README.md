@@ -203,7 +203,11 @@ fib.display_anim(anim)
 ```
 or saved to file using the standard Matplotlib API:
 ```python 
+# Save as mp4 (requires ffmpeg)
 anim.save("mode_animation.mp4", writer="ffmpeg", fps=30)
+
+# Or as a gif
+anim.save("mode_animation.gif", writer="pillow", fps=15)
 ```
 
 

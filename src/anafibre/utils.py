@@ -266,3 +266,16 @@ def repr_html_modes(modes):
     </div>
     """
     return html
+
+
+class GuidedModeList(list):
+    """List of GuidedMode objects with notebook HTML representation."""
+
+    def __getitem__(self, item):
+        result = super().__getitem__(item)
+        if isinstance(item, slice):
+            return GuidedModeList(result)
+        return result
+
+    def _repr_html_(self):
+        return repr_html_modes(self)

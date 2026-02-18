@@ -10,6 +10,8 @@ Author: Sebastian Golat
 """
 
 import numpy as np
+
+from .utils import repr_html_modes
 from .dispersion import find_b_of_V, b_to_neff, b_to_kz, F_dispersion
 from .fields import GuidedMode
 # from .normalization import compute_power, compute_normalisation
@@ -102,9 +104,7 @@ class StepIndexFibre:
         self.core = core
         self.clad = clad
 
-        # Store μ (can be scalar or callable)
-        self.mu_core = mu_core
-        self.mu_clad = mu_clad
+
 
         # Helpers to wrap constants/callables uniformly
         def _as_callable(val):
@@ -136,7 +136,9 @@ class StepIndexFibre:
                 f"Insufficient data for {side}: provide either {side} material, "
                 f"or eps_{side}, or n_{side}."
             )
-
+        # Store μ (can be scalar or callable)
+        self.mu_core = _as_callable(mu_core)
+        self.mu_clad = _as_callable(mu_clad)
         self.eps_core = _pick_eps("core", core, eps_core, n_core, self.mu_core)
         self.eps_clad = _pick_eps("clad", clad, eps_clad, n_clad, self.mu_clad)
 
@@ -570,6 +572,31 @@ class StepIndexFibre:
 
         return max_valid_ell
     
+    def list_modes_at(self, wavelength):
+        from .utils import GuidedModeList
+
+        ## Calculate and display guided modes
+        modes = []       # List to store the modes
+        ell_max = self.ell_max(wavelength=wavelength)  # Maximum azimuthal mode number
+        for ell in range(0, ell_max + 1):       # Loop over azimuthal mode numbers
+            if ell == 0:    # Special case for ell = 0
+                m_max_te = self.m_max(wavelength=wavelength, ell=ell, mode_type="TE")  # Maximum radial mode number for TE
+                m_max_tm = self.m_max(wavelength=wavelength, ell=ell, mode_type="TM")  # Maximum radial mode number for TM
+                for m in range(1, m_max_te + 1):    
+                    modes.append(self.TE(n=m, wl=wavelength))  
+                for m in range(1, m_max_tm + 1):
+                    modes.append(self.TM(n=m, wl=wavelength))
+            else:   
+                m_max = self.m_max(wavelength=wavelength, ell=ell) # Maximum radial mode number for hybrid modes
+                for m in range(1, m_max + 1):
+                    if m % 2 == 1:  # Odd m corresponds to HE modes
+                        modes.append(self.HE(ell=ell, n=m, wl=wavelength)) 
+                    else:           # Even m corresponds to EH modes
+                        modes.append(self.EH(ell=ell, n=m, wl=wavelength))
+
+        modes = [m for m in modes if m is not None]                 # Remove any None entries from the modes list
+        modes = sorted(modes, key=lambda m: m.neff, reverse=True)   # Sort modes by effective index in descending order
+        return GuidedModeList(modes)
     # -------------------------- mode construction ----------------------------
     def HE(self, ell, n, wl, **kwargs):
         """Return an HE mode (ell>0, odd m)."""

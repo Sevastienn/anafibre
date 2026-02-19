@@ -167,5 +167,7 @@ dist/
 build/
 
 # Jupyter Notebook outputs
-notebooks/*.pdf
-notebooks/*.gif
+examples/*.pdf
+examples/*.gif
+examples/*.mp4
+

@@ -53,6 +53,45 @@ def _wDlnK(ell, w):
             return out
 
 def F_dispersion(fibre, ell, b, V=None, wavelength=None, mode_type=None):
+    """Evaluate the step-index fibre dispersion function.
+
+    Parameters
+    ----------
+    fibre : anafibre.fibre.StepIndexFibre
+        Fibre model used to evaluate material and geometric terms.
+    ell : int
+        Azimuthal mode index.
+    b : float | complex | array-like
+        Normalized propagation constant candidate(s).
+    V : float | array-like, optional
+        Normalized frequency. Provide either ``V`` or ``wavelength``.
+    wavelength : float | array-like, optional
+        Wavelength in meters. Used when ``V`` is not provided.
+    mode_type : {"TE", "TM", None}, optional
+        For ``ell == 0``, selects TE/TM branch. Ignored for ``ell != 0``.
+
+    Returns
+    -------
+    numpy.ndarray | float | complex
+        Dispersion residual with the same broadcasted shape as the inputs.
+
+    Raises
+    ------
+    ValueError
+        If neither ``V`` nor ``wavelength`` is provided, or ``mode_type`` is invalid
+        for ``ell == 0``.
+
+    Notes
+    -----
+    The implementation follows the reduced dispersion formulation from the paper:
+
+    - $n_\\mathrm{eff}(b)=\\sqrt{b\\,n_1^2+(1-b)\\,n_2^2}$
+    - $u=V\\sqrt{1-b}$, $w=V\\sqrt{b}$
+    - $F_\\ell$ is built from material-weighted logarithmic Bessel derivatives.
+
+    For $\\ell=0$, TE/TM branches are selected by ``mode_type``; for $\\ell\\neq 0$
+    the hybrid-mode scalar dispersion residual is used.
+    """
     b = np.asarray(b)
 
     if V is not None:
@@ -104,6 +143,51 @@ def F_dispersion(fibre, ell, b, V=None, wavelength=None, mode_type=None):
         return (phi_epsJ * phi_muJ - J ** 2 * (ell * ne) ** 2)/ (ell * ell)*(b*(1-b))
 
 def find_b_of_V(fibre, ell, m, V=None, wavelength=None, mode_type=None, N_b=2000, tol=np.nextafter(0, 1), complex_tol=1e-8, maxiter=200, return_complex=False):
+    """Solve for the guided root ``b`` of a specific mode branch.
+
+    Parameters
+    ----------
+    fibre : anafibre.fibre.StepIndexFibre
+        Fibre model.
+    ell : int
+        Azimuthal mode index.
+    m : int
+        Radial mode index (1-based root ordering by descending real ``b``).
+    V : float | array-like, optional
+        Normalized frequency values. Provide either ``V`` or ``wavelength``.
+    wavelength : float | array-like, optional
+        Wavelength values in meters.
+    mode_type : {"TE", "TM", None}, optional
+        TE/TM selection for ``ell == 0``.
+    N_b : int, default=2000
+        Number of samples used for bracketing/seeding roots on the real axis.
+    tol : float, default=np.nextafter(0, 1)
+        Scalar root tolerance used by Brent's method.
+    complex_tol : float, default=1e-8
+        Residual tolerance for complex root acceptance.
+    maxiter : int, default=200
+        Maximum function evaluations for complex solver iterations.
+    return_complex : bool, default=False
+        If ``True``, keeps complex-valued roots. If ``False``, returns real values
+        when roots are effectively real.
+
+    Returns
+    -------
+    float | complex | numpy.ndarray
+        Mode root ``b`` for each input sample. Missing roots are returned as ``nan``
+        (or ``nan+0j`` when complex output is requested).
+
+    Raises
+    ------
+    ValueError
+        If neither ``V`` nor ``wavelength`` is provided.
+
+    Notes
+    -----
+    Roots are selected as the $m$-th solution after sorting by descending real
+    part of $b$ (consistent with the paper's high-$n_\\mathrm{eff}$ to low-$n_\\mathrm{eff}$ mode
+    indexing at fixed $\\ell$ and $V$).
+    """
     scalar_input = np.isscalar(V) or np.isscalar(wavelength)
 
     if V is not None:
@@ -175,12 +259,53 @@ def find_b_of_V(fibre, ell, m, V=None, wavelength=None, mode_type=None, N_b=2000
     return out
 
 def b_to_neff(fibre, b, wavelength):
+    """Convert normalized propagation constant ``b`` to effective index.
+
+    Parameters
+    ----------
+    fibre : anafibre.fibre.StepIndexFibre
+        Fibre model.
+    b : float | array-like
+        Normalized propagation constant.
+    wavelength : float | array-like
+        Wavelength in meters.
+
+    Returns
+    -------
+    float | numpy.ndarray
+        Effective refractive index ``n_eff``.
+
+    Notes
+    -----
+    Uses
+    $n_\\mathrm{eff}=\\sqrt{b\\,n_1^2+(1-b)\\,n_2^2}$.
+    """
     n1 = fibre.n_core(wavelength)
     n2 = fibre.n_clad(wavelength)
     b = np.asarray(b)
     return np.sqrt(b * n1**2 + (1 - b) * n2**2)
 
 def b_to_kz(fibre, b, wavelength):
+    """Convert normalized propagation constant ``b`` to longitudinal wavevector.
+
+    Parameters
+    ----------
+    fibre : anafibre.fibre.StepIndexFibre
+        Fibre model.
+    b : float | array-like
+        Normalized propagation constant.
+    wavelength : float | array-like
+        Wavelength in meters.
+
+    Returns
+    -------
+    float | numpy.ndarray
+        Longitudinal propagation constant ``k_z`` in rad/m.
+
+    Notes
+    -----
+    Uses $k_z=n_\\mathrm{eff}k_0$ with $k_0=2\\pi/\\lambda$.
+    """
     n_eff = b_to_neff(fibre, b, wavelength)
     wl = _strip_unit(wavelength, unit=units.m if _HAS_UNITS else None)
     k0 = 2 * np.pi / wl

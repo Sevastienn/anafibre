@@ -25,9 +25,18 @@ def _strip_unit(val, unit=None):
     return val
 
 def wavelength_to_rgb(wavelength):
-    """
-    Convert a wavelength (in nm) to an approximate RGB color for visualisation.
-    Wavelength range: 380–780 nm. Outside this range returns black.
+    """Map visible wavelength to an approximate sRGB color.
+
+    Parameters
+    ----------
+    wavelength : float
+        Wavelength in nanometers.
+
+    Returns
+    -------
+    tuple[float, float, float]
+        Normalized ``(R, G, B)`` values in the range ``[0, 1]``.
+        Values outside the visible range (380-780 nm) return black ``(0, 0, 0)``.
     """
     if wavelength < 380 or wavelength > 780:
         return (0, 0, 0)  # Outside visible range
@@ -71,24 +80,18 @@ def wavelength_to_rgb(wavelength):
     return (R / 255, G / 255, B / 255)
 
 def wavelength_band_label_nm(wl_nm):
-        """
-        Map wavelength (in nm) → (short_label, bg_color_hex).
-        Visible keeps using wavelength_to_rgb; everything else gets a labeled gray badge.
+        """Classify wavelength band labels for non-visible wavelengths.
 
-        Band edges used (common conventions, with priority where ranges overlap):
-        γ-rays:        λ < 0.01 nm
-        X-rays:        0.01–10 nm
-        EUV:           10–121 nm
-        UV:            121–380 nm
-        Visible:       380–780 nm (handled elsewhere with color swatch)
-        IR:            780–30,000 nm (0.78–30 μm)  [NIR+MIR]
-        THz:           30,000–3,000,000 nm (30 μm–3 mm)  [overlaps FIR/sub-mm; we show THz]
-        μ (Microwave): 1,000,000–300,000,000 nm (1 mm–0.3 m)
-        RF (Radio):    ≥ 300,000,000 nm (≥ 0.3 m)
+        Parameters
+        ----------
+        wl_nm : float | None
+            Wavelength in nanometers.
 
-        Notes:
-        - The THz window (30 μm–3 mm) intentionally overlaps FIR/sub-mm. We show "THz" there.
-        - If you prefer FIR up to 1 mm, move the THz lower edge or adjust priorities below.
+        Returns
+        -------
+        tuple[str | None, str | None]
+            A tuple ``(label, color_hex)``. Visible wavelengths return ``(None, None)``
+            because they are rendered with :func:`wavelength_to_rgb`.
         """
         if wl_nm is None or not (wl_nm > 0):
             return None, None
@@ -133,9 +136,19 @@ def wavelength_band_label_nm(wl_nm):
         return None, None
 
 def pretty_length(qty, digits=3):
-    """
-    Return a pure LaTeX fragment for a length Quantity (assumed in metres).
-    Ensures the unit string has no extra $.
+    """Format a length quantity as a compact LaTeX fragment.
+
+    Parameters
+    ----------
+    qty : astropy.units.Quantity
+        Length quantity.
+    digits : int, default=3
+        Significant digits in the formatted value.
+
+    Returns
+    -------
+    str
+        A LaTeX snippet without surrounding ``$`` delimiters.
     """
     for unit in (units.m, units.cm, units.mm, units.um, units.nm):
         v = qty.to_value(unit)
@@ -147,11 +160,21 @@ def pretty_length(qty, digits=3):
     return rf"{qty.to_value(units.m):.{digits}g} \, {unit_str}"
 
 def repr_html_modes(modes):
+    """Build a single HTML table summarizing a sequence of guided modes.
+
+    Parameters
+    ----------
+    modes : iterable
+        Iterable of guided-mode-like objects with ``mode_label``, ``wavelength``,
+        ``V``, ``neff``, ``a_plus`` and ``a_minus`` attributes.
+
+    Returns
+    -------
+    str
+        HTML markup for a styled table. Returns an empty string if no valid modes
+        are provided.
+    """
     import numpy as np
-    """
-    Return ONE HTML table for an iterable of GuidedMode objects,
-    using the same styling/columns as the single-row _repr_html_.
-    """
     from .utils import _HAS_UNITS, wavelength_to_rgb, wavelength_band_label_nm
 
     modes = [m for m in modes if m is not None]

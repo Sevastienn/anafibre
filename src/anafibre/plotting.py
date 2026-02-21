@@ -31,6 +31,46 @@ def plot_dispersion_chart(
     ylabel=True,
     xlabel=True, rasterized=True
 ):
+    """Plot dispersion residual map and zero contour in ``(V, b)`` space.
+
+    Parameters
+    ----------
+    fibre : anafibre.fibre.StepIndexFibre
+        Fibre model instance.
+    ell : int, default=1
+        Azimuthal mode index.
+    Vmin, Vmax : float, default=(0, 10)
+        Horizontal-axis limits for normalized frequency.
+    Npoints : int, default=500
+        Sampling resolution in each axis.
+    bmin, bmax : float, default=(0, 1)
+        Vertical-axis limits for normalized propagation constant.
+    mode_type : {"TE", "TM", None}, optional
+        TE/TM selector for ``ell == 0``.
+    show_bessel_zeros : bool, default=True
+        Show Bessel-root ticks on a secondary top axis.
+    colorbar : bool, default=False
+        Add colorbar for the residual colormap.
+    ax : matplotlib.axes.Axes, optional
+        Existing axis to draw on. If omitted, a new figure/axis is created.
+    cbar_label : str, default="$F_\\ell(b,V)$"
+        Colorbar label.
+    show_xgrid : bool, default=False
+        Draw major x-grid lines.
+    show_bessel_grid : bool, default=True
+        Draw vertical guide lines at Bessel roots.
+    bessel_grid_kwargs : dict, optional
+        Keyword overrides for Bessel grid line style.
+    ylabel, xlabel : bool, default=True
+        Enable axis labels.
+    rasterized : bool, default=True
+        Rasterize the dense pcolormesh for faster vector exports.
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        Axis containing the plot.
+    """
     V_vals = np.linspace(Vmin, Vmax, Npoints)
     b_vals = np.linspace(bmin, bmax, Npoints)
     VV, BB = np.meshgrid(V_vals, b_vals)
@@ -111,16 +151,50 @@ def plot_dispersion_vs_wavelength(
     rasterized=True
 ):
     """
-    Same visualization as plot_dispersion_chart but with the horizontal axis
-    in wavelength (nm) instead of V. Wavelengths are sampled linearly
-    between wavelength_min and wavelength_max (nm).
+    Plot dispersion residual map and zero contour in ``(lambda, b)`` space.
 
-    The function attempts to convert wavelength -> V using either:
-        • fibre.V_from_wavelength(wavelength_in_m) or fibre.V_of_wavelength(...)
-        • or via core radius and refractive indices:
-            V(λ) = 2π * a / λ * sqrt(n_core(λ)^2 - n_clad(λ)^2)
-        Where `a` is fibre.core_radius or fibre.rho_0 and n_core/n_clad
-        can be callables (n(λ) ) or scalars.
+    Parameters
+    ----------
+    fibre : anafibre.fibre.StepIndexFibre
+        Fibre model instance.
+    ell : int, default=1
+        Azimuthal mode index.
+    wavelength_min, wavelength_max : float, default=(400.0, 700.0)
+        Wavelength range in nanometers.
+    Npoints : int, default=500
+        Sampling resolution in each axis.
+    bmin, bmax : float, default=(0, 1)
+        Vertical-axis limits for normalized propagation constant.
+    mode_type : {"TE", "TM", None}, optional
+        TE/TM selector for ``ell == 0``.
+    show_bessel_zeros : bool, default=True
+        Draw approximate Bessel-root markers on a top axis.
+    colorbar : bool, default=False
+        Add colorbar for the residual colormap.
+    ax : matplotlib.axes.Axes, optional
+        Existing axis to draw on. If omitted, a new figure/axis is created.
+    cbar_label : str, default="$F_\\ell(b,\\lambda)$"
+        Colorbar label.
+    show_xgrid : bool, default=False
+        Draw major x-grid lines.
+    show_bessel_grid : bool, default=True
+        Draw vertical guide lines at approximate Bessel-root locations.
+    bessel_grid_kwargs : dict, optional
+        Keyword overrides for Bessel grid line style.
+    ylabel, xlabel : bool, default=True
+        Enable axis labels.
+    rasterized : bool, default=True
+        Rasterize the dense pcolormesh for faster vector exports.
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        Axis containing the plot.
+
+    Raises
+    ------
+    ValueError
+        If wavelength-to-``V`` conversion cannot be inferred from the fibre object.
     """
 
     # Build wavelength array (meters)
@@ -338,6 +412,11 @@ def add_visible_spectrum(ax, position=[0, 0, 1, 0.01], wavelengths=np.linspace(4
         If provided, overrides the wavelength range.
     resolution : int
         Number of color points.
+
+    Returns
+    -------
+    None
+        Adds an inset spectrum strip to ``ax``.
     """
     if xlim is not None:
         wavelengths = np.linspace(xlim[0], xlim[1], resolution)
@@ -355,10 +434,31 @@ def plot_nu_vs_V(
     ax=None, show=('real', 'imag'), title=None
 ):
     """
-    Plot ν(V) for a given (ell, m), following the definition used in fields.py.
+    Plot components of ``nu(V)`` for one modal branch.
 
-    show: tuple containing any of {'real','imag','abs','angle'} to display.
-    Returns the axes.
+    Parameters
+    ----------
+    fibre : anafibre.fibre.StepIndexFibre
+        Fibre model instance.
+    ell, m : int
+        Azimuthal and radial mode indices.
+    Vmin, Vmax : float, default=(0.0, 10.0)
+        Horizontal-axis bounds.
+    Npoints : int, default=400
+        Number of sampled ``V`` points.
+    mode_type : {"TE", "TM", None}, optional
+        Mode family selector for ``ell == 0`` cases.
+    ax : matplotlib.axes.Axes, optional
+        Existing axis to draw on.
+    show : tuple[str, ...], default=("real", "imag")
+        Any subset of ``{"real", "imag", "abs", "angle"}``.
+    title : str, optional
+        Reserved title parameter (currently not applied).
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        Axis containing the plot.
     """
     import numpy as np
     import matplotlib.pyplot as plt
@@ -401,7 +501,29 @@ def plot_sigma_vs_V(
     ax=None, title=None
 ):
     """
-    Plot σ(V) used for modal power normalisation for a given (ell, m).
+    Plot ``sigma(V)`` used for modal power normalization.
+
+    Parameters
+    ----------
+    fibre : anafibre.fibre.StepIndexFibre
+        Fibre model instance.
+    ell, m : int
+        Azimuthal and radial mode indices.
+    Vmin, Vmax : float, default=(0.0, 10.0)
+        Horizontal-axis bounds.
+    Npoints : int, default=400
+        Number of sampled ``V`` points.
+    mode_type : {"TE", "TM", None}, optional
+        Mode family selector for ``ell == 0`` cases.
+    ax : matplotlib.axes.Axes, optional
+        Existing axis to draw on.
+    title : str, optional
+        Reserved title parameter (currently not applied).
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        Axis containing the plot.
     """
     import numpy as np
     import matplotlib.pyplot as plt
@@ -433,16 +555,45 @@ def plot_xy_vector_field(
     density=1.0, linewidth=1, color='k', type='quiver', labels=False
 ):
     """
-    Plot XY vector field and colormap, showing both inside and outside fibre.
-    X, Y : 2D arrays (SI units or astropy Quantity)
-    F    : (..., 3) vector field (real or Quantity)
+    Plot a transverse vector field with optional longitudinal colormap.
 
     Parameters
     ----------
+    X, Y : array-like
+        2D coordinate arrays in meters (or astropy quantities).
+    F : array-like
+        Vector field with last axis ``(Fx, Fy, Fz)``.
+    ax : matplotlib.axes.Axes, optional
+        Existing axis to draw on.
     scale : {"auto", float}
         Relative multiplier applied to the automatically determined quiver scale
         from the transverse field amplitude. Use "auto" or None for factor 1.0;
         provide a number (e.g., 0.7 or 1.5) to shrink/enlarge arrows w.r.t. autoscale.
+    zscale : float, optional
+        Symmetric limits for the ``Fz`` colormap.
+    cmap : str, default="RdBu_r"
+        Colormap for the ``Fz`` background.
+    stride : int, default=4
+        Subsampling factor for quiver arrows.
+    title : str, optional
+        Axis title.
+    xlabel, ylabel : str, optional
+        Axis labels.
+    colorbar_label : str, optional
+        Label for the ``Fz`` colorbar.
+    colorbar : bool, default=False
+        Whether to draw the ``Fz`` colorbar.
+    density, linewidth, color : float/str
+        Streamplot styling parameters (used when ``type='streamplot'``).
+    type : {"quiver", "streamplot"}, default="quiver"
+        Vector rendering style.
+    labels : bool, default=False
+        Whether to draw axis labels with units.
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        Axis containing the plot.
     """
     import numpy as np
     import matplotlib.pyplot as plt
@@ -581,8 +732,47 @@ def plot_complex_field(
     use_tex=False,                     # set True to use full LaTeX (requires TeX installed)
 ):
     """
-    Plot a complex scalar field with colour = phase (0 rad → red) and brightness = magnitude.
-    Returns (fig, ax, cb_phase, cb_mag).
+    Plot a complex scalar field in Cartesian coordinates using HSV mapping.
+
+    Parameters
+    ----------
+    field : array-like
+        Complex scalar field.
+    X, Y : array-like, optional
+        Cartesian coordinate grids. Used for plot extent and unit-aware labels.
+    ax : matplotlib.axes.Axes, optional
+        Existing axis to draw on.
+    variant : {"dark", "light"}, default="dark"
+        Encoding style for magnitude in HSV space.
+    gamma : float, default=1.0
+        Saturation exponent for ``variant='light'``.
+    percentile : float, default=99.0
+        Robust percentile used to auto-scale magnitude.
+    vmax : float, optional
+        Explicit magnitude scaling maximum.
+    show_phase_cbar, show_mag_cbar : bool, default=True
+        Whether to display phase and magnitude colorbars.
+    phase_ticks : tuple, default=(-pi, -pi/2, 0, pi/2, pi)
+        Phase colorbar tick locations.
+    phase_cmap : matplotlib colormap, default=plt.cm.hsv
+        Cyclic colormap used for phase.
+    mag_cmap : str, default="gray"
+        Colormap used for magnitude colorbar.
+    coord_unit : astropy.units.Unit, default=units.um
+        Target unit for coordinate display when inputs are quantities.
+    title, xlabel, ylabel : str, optional
+        Plot title and axis labels.
+    phase_label, mag_label : str
+        Colorbar labels.
+    cbar_pad_phase, cbar_pad_mag : float
+        Colorbar spacing.
+    use_tex : bool, default=False
+        Enable full LaTeX text rendering.
+
+    Returns
+    -------
+    tuple
+        ``(fig, ax, cb_phase, cb_mag)``.
     """
     # LaTeX / mathtext setup
     if use_tex:
@@ -721,7 +911,7 @@ def plot_complex_field_polar(
     use_tex=False,
 ):
     """
-    Plot a complex scalar field defined on a polar grid using polar coordinates.
+    Plot a complex scalar field on a polar grid.
 
     Parameters
     ----------
@@ -732,7 +922,37 @@ def plot_complex_field_polar(
         or 1D arrays with lengths Nr and Nphi respectively. Rho may be an
         astropy Quantity; Phi may be a Quantity with angle units (converted to rad).
 
-    Returns: (fig, ax, cb_phase, cb_mag)
+    ax : matplotlib.axes.Axes, optional
+        Existing polar axis to draw on.
+    variant : {"dark", "light"}, default="dark"
+        Encoding style for magnitude in HSV space.
+    gamma : float, default=1.0
+        Saturation exponent for ``variant='light'``.
+    percentile : float, default=99.0
+        Robust percentile used to auto-scale magnitude.
+    vmax : float, optional
+        Explicit magnitude scaling maximum.
+    show_phase_cbar, show_mag_cbar : bool, default=True
+        Whether to display phase and magnitude colorbars.
+    phase_cbar_style : {"bar", "wheel", "edge"}, default="wheel"
+        Visual style for phase legend.
+    coord_unit : astropy.units.Unit, default=units.um
+        Target unit for radial coordinate display.
+    core_radius : float | Quantity, optional
+        If provided, radial ticks are placed at integer multiples of this value.
+    title, rlabel : str, optional
+        Plot title and radial-axis label.
+    show_grid : bool, default=True
+        Enable polar grid.
+    grid_kwargs : dict, optional
+        Style overrides for grid rendering.
+    use_tex : bool, default=False
+        Enable full LaTeX text rendering.
+
+    Returns
+    -------
+    tuple
+        ``(fig, ax, cb_phase, cb_mag)``.
     """
     # LaTeX / mathtext setup
     if use_tex:
@@ -1018,14 +1238,57 @@ def animate_fields_xy(
     eps=1e-30,
 ):
     """
-    Animate instantaneous fields in an XY cross-section.
+    Animate instantaneous electric and/or magnetic fields in an XY slice.
 
-    Option 2: RMS normalization for quiver arrows.
-      • Arrows preserve relative magnitudes.
-      • Transverse arrows are divided by RMS(|F_perp|) (computed once at theta=0),
-        giving a more energy-like visual normalization than max/percentile.
-      • z-colors use robust percentile scaling (unless zscale given).
-      • Works with astropy units via global _HAS_UNITS / units.
+    Parameters
+    ----------
+    modes : GuidedMode | list[GuidedMode], optional
+        Mode object(s) to superpose. Used in option A.
+    weights : complex | list[complex], optional
+        Relative modal amplitudes/phases aligned with ``modes``.
+    n_radii : float, default=2.0
+        Half-width of auto-generated grid in units of core radius.
+    Np : int, default=200
+        Resolution per axis for auto-generated grid.
+    fields : list[tuple], optional
+        Option B: explicit components ``(E, H, omega)`` on a common grid.
+    X, Y : array-like, optional
+        Cartesian grids for option B (or override for option A).
+    z : float, default=0.0
+        Axial position for mode evaluation.
+    show : tuple[str, ...], default=("E", "H")
+        Any subset of ``{"E", "H"}``.
+    scale : {"auto", float}, default="auto"
+        Arrow scale multiplier.
+    zscale : float, optional
+        Fixed symmetric color scale for longitudinal components.
+    cmap : str, default="RdBu_r"
+        Colormap for longitudinal components.
+    n_frames : int, default=60
+        Number of animation frames per period.
+    interval : int, default=50
+        Delay between frames in milliseconds.
+    figsize : tuple, default=(8, 4.5)
+        Figure size.
+    robust_p : float, default=99.0
+        Percentile used for robust color/normalization scaling.
+    quiver_density : int, default=20
+        Approximate number of arrows per axis.
+    quiver_scale : float, default=25.0
+        Base quiver scaling constant.
+    eps : float, default=1e-30
+        Numerical floor used in normalization safeguards.
+
+    Returns
+    -------
+    matplotlib.animation.FuncAnimation
+        Animation object for notebook display or export.
+
+    Raises
+    ------
+    ValueError
+        If neither ``modes`` nor ``fields`` is provided, or if required grids are
+        missing for explicit ``fields`` input.
     """
     import numpy as np
     import matplotlib.pyplot as plt

@@ -29,7 +29,31 @@ from IPython.display import display_html, HTML, display
 __all__ = ["StepIndexFibre", "GuidedMode", "RefractiveIndexMaterial", "animate_fields_xy", "repr_html_modes", "display_modes", "display_anim"]
 
 def display_modes(*modes):
+    """Render one or more guided modes as an HTML table in notebooks.
+
+    Parameters
+    ----------
+    *modes
+        One or more :class:`anafibre.fields.GuidedMode` objects.
+
+    Returns
+    -------
+    None
+        Displays HTML output via IPython.
+    """
     display_html(repr_html_modes(modes), raw=True)
 
 def display_anim(anim):
+    """Render a Matplotlib animation inline in notebooks.
+
+    Parameters
+    ----------
+    anim : matplotlib.animation.Animation
+        Animation instance with a ``to_jshtml`` method.
+
+    Returns
+    -------
+    None
+        Displays the animation via IPython HTML output.
+    """
     display(HTML(anim.to_jshtml()))

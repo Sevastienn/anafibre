@@ -14,11 +14,12 @@ import pytest
 import numpy as np
 import sys
 import os
+from pathlib import Path
 
 # Add src to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from anafibre import StepIndexFibre, GuidedMode
+from anafibre import StepIndexFibre, GuidedMode, RefractiveIndexMaterial
 
 
 class TestStepIndexFibre:
@@ -228,6 +229,76 @@ class TestIntegrationBasics:
         assert E.shape[-1] == 3  # 3 field components
         
         print(f"Workflow test passed: V={V:.3f}, neff={neff:.6f}, label={label}")
+
+
+class TestOptionalExtras:
+    """Tests for optional extras: units and refractiveindex integrations."""
+
+    def test_units_quantity_inputs_match_plain_float(self):
+        """If astropy is installed, Quantity and float inputs should agree."""
+        units = pytest.importorskip("astropy.units")
+
+        fiber = StepIndexFibre(core_radius=250e-9, n_core=2.00, n_clad=1.33)
+        wl_float = 500e-9
+        wl_qty = 500 * units.nm
+
+        assert np.isclose(fiber.V(wl_qty), fiber.V(wl_float), rtol=1e-12)
+        assert np.isclose(fiber.n_core(wl_qty), fiber.n_core(wl_float), rtol=1e-12)
+        assert np.isclose(fiber.n_clad(wl_qty), fiber.n_clad(wl_float), rtol=1e-12)
+
+    def test_upstream_refractiveindex_material_is_wrapped(self):
+        """If refractiveindex + local DB are available, real upstream objects are wrapped safely."""
+        ri = pytest.importorskip("refractiveindex.refractiveindex")
+        db_path = Path.home() / ".refractiveindex.info-database"
+        if not db_path.exists():
+            pytest.skip("Local refractiveindex database not found; skipping real upstream material test.")
+
+        upstream = ri.RefractiveIndexMaterial(
+            "main",
+            "Si3N4",
+            "Luke",
+            db_path=db_path,
+            auto_download=False,
+        )
+
+        with pytest.warns(UserWarning, match="auto-wrapping"):
+            fiber = StepIndexFibre(core_radius=250e-9, core=upstream, clad=upstream)
+
+        assert isinstance(fiber.core, RefractiveIndexMaterial)
+        assert isinstance(fiber.clad, RefractiveIndexMaterial)
+        assert np.isfinite(fiber.n_core(500e-9))
+        assert np.isfinite(fiber.n_clad(500e-9))
+
+    def test_upstream_and_anafibre_material_give_same_fiber_indices(self):
+        """Real upstream and anafibre wrappers should produce the same fibre index values."""
+        ri = pytest.importorskip("refractiveindex.refractiveindex")
+        db_path = Path.home() / ".refractiveindex.info-database"
+        if not db_path.exists():
+            pytest.skip("Local refractiveindex database not found; skipping material equivalence test.")
+
+        upstream = ri.RefractiveIndexMaterial(
+            "main",
+            "Si3N4",
+            "Luke",
+            db_path=db_path,
+            auto_download=False,
+        )
+        local = RefractiveIndexMaterial(
+            "main",
+            "Si3N4",
+            "Luke",
+            db_path=db_path,
+            auto_download=False,
+        )
+
+        with pytest.warns(UserWarning, match="auto-wrapping"):
+            fiber_upstream = StepIndexFibre(core_radius=250e-9, core=upstream, clad=upstream)
+        fiber_local = StepIndexFibre(core_radius=250e-9, core=local, clad=local)
+
+        wavelengths = np.array([450e-9, 500e-9, 650e-9, 1.0e-6])
+        n_up = fiber_upstream.n_core(wavelengths)
+        n_local = fiber_local.n_core(wavelengths)
+        assert np.allclose(n_up, n_local, rtol=1e-12, atol=0.0)
 
 
 if __name__ == "__main__":

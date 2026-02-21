@@ -10,6 +10,7 @@ Author: Sebastian Golat
 """
 
 import numpy as np
+import warnings
 
 from .utils import repr_html_modes
 from .dispersion import find_b_of_V, b_to_neff, b_to_kz, F_dispersion
@@ -20,38 +21,90 @@ from scipy.optimize import brentq
 
 # Optional refractiveindex dependency
 try:
-    from refractiveindex.refractiveindex import RefractiveIndex, NoExtinctionCoefficient
+    from refractiveindex.refractiveindex import RefractiveIndexMaterial as RIMaterial, NoExtinctionCoefficient
     _HAS_REFRACTIVEINDEX = True
 except ImportError:
     _HAS_REFRACTIVEINDEX = False
-    RefractiveIndex = None
-    NoExtinctionCoefficient = None
+    RIMaterial = None
+    NoExtinctionCoefficient = Exception
         
 class RefractiveIndexMaterial:
+    """Wrapper around the `refractiveindex` database material interface.
+
+    Parameters
+    ----------
+    shelf : str
+        Refractiveindex.info shelf name.
+    book : str
+        Refractiveindex.info book name.
+    page : str
+        Refractiveindex.info page name.
+    **ri_kwargs
+        Additional keyword arguments forwarded to
+        :class:`refractiveindex.refractiveindex.RefractiveIndex`.
+    """
     def __init__(self, shelf, book, page, **ri_kwargs):
         if not _HAS_REFRACTIVEINDEX:
             raise ImportError(
                 "RefractiveIndexMaterial requires the 'refractiveindex' package. "
                 "Install it with: pip install refractiveindex"
             )
-        BD = RefractiveIndex(**ri_kwargs)
-        # Material(self.getMaterialFilename(shelf, book, page))
-        self.material = BD.getMaterial(shelf=shelf, book=book, page=page)
-        self.rangeMin = self.material.refractiveIndex.rangeMin
-        self.rangeMax = self.material.refractiveIndex.rangeMax
+        self.material = RIMaterial(shelf=shelf, book=book, page=page, **ri_kwargs)
+        self.rangeMin, self.rangeMax = self.material._wl_range
         
+        # Guard against NaNs at the edges of the wavelength range by slightly shrinking it if needed
         if np.isnan(self.get_eps(self.rangeMin*1e-6)):
             self.rangeMin += 0.1
         if np.isnan(self.get_eps(self.rangeMax*1e-6)):
             self.rangeMax -= 0.1
 
     def get_refractive_index(self, wl):
-        return self.material.getRefractiveIndex(np.copy(wl), bounds_error=False)
+        """Return refractive index values from the database.
+
+        Parameters
+        ----------
+        wl : float | array-like
+            Wavelength in nanometers.
+
+        Returns
+        -------
+        float | numpy.ndarray
+            Refractive index ``n``.
+        """
+        return self.material.get_refractive_index(np.copy(wl))
     
     def get_extinction_coefficient(self, wl):
-        return self.material.getExtinctionCoefficient(np.copy(wl), bounds_error=False)
+        """Return extinction coefficient values from the database.
+
+        Parameters
+        ----------
+        wl : float | array-like
+            Wavelength in nanometers.
+
+        Returns
+        -------
+        float | numpy.ndarray
+            Extinction coefficient ``k``.
+        """
+        return self.material.get_extinction_coefficient(np.copy(wl))
 
     def get_eps(self, wavelength, exp_type='exp_minus_i_omega_t', real=True):
+        """Evaluate permittivity from database material data.
+
+        Parameters
+        ----------
+        wavelength : float | array-like
+            Wavelength in meters (or astropy quantity convertible to meters).
+        exp_type : {"exp_minus_i_omega_t", "exp_plus_i_omega_t"}, default="exp_minus_i_omega_t"
+            Time-harmonic convention used for complex permittivity sign.
+        real : bool, default=True
+            If ``True``, returns ``n^2``. If ``False``, returns ``(n ± i k)^2``.
+
+        Returns
+        -------
+        float | complex | numpy.ndarray
+            Relative permittivity.
+        """
         wl = _strip_unit(wavelength, units.m if _HAS_UNITS else None)*1e9  # Convert to nm if using astropy units
         n = self.get_refractive_index(wl)
         if real:
@@ -65,8 +118,24 @@ class RefractiveIndexMaterial:
         except NoExtinctionCoefficient:
             return n**2
 
+    @classmethod
+    def from_upstream(cls, material):
+        """Build wrapper from an upstream ``refractiveindex`` material instance."""
+        obj = cls.__new__(cls)
+        obj.material = material
+        wl_range = getattr(material, "_wl_range", (None, None))
+        if wl_range is None:
+            wl_range = (None, None)
+        obj.rangeMin, obj.rangeMax = wl_range
+        return obj
+
 
 class StepIndexFibre:
+    """Cylindrical step-index fibre model with analytical mode utilities.
+
+    The class stores core/cladding constitutive parameters and provides methods
+    to compute dispersion roots, propagation constants, and mode objects.
+    """
     def __init__(
         self,
         core_radius,
@@ -91,16 +160,52 @@ class StepIndexFibre:
         Parameters
         ----------
         core_radius : float or Quantity[m]
-        core, clad  : RefractiveIndexMaterial (highest precedence, per side)
-        eps_*       : scalar or callable λ→ε(λ) (used if material not provided)
-        n_*         : scalar or callable λ→n(λ) (used if neither material nor ε_* provided)
-        mu_*        : scalar or callable λ→μ(λ) (default 1.0)
-        exp_type    : passed to RefractiveIndexMaterial.get_eps when core/clad given
+        core : RefractiveIndexMaterial, optional
+            Core material object (highest precedence for the core side).
+        clad : RefractiveIndexMaterial, optional
+            Cladding material object (highest precedence for the cladding side).
+        eps_core : float or callable, optional
+            Core relative permittivity ``eps(lambda)`` if ``core`` is not provided.
+        eps_clad : float or callable, optional
+            Cladding relative permittivity ``eps(lambda)`` if ``clad`` is not provided.
+        n_core : float or callable, optional
+            Core refractive index ``n(lambda)`` used if neither ``core`` nor
+            ``eps_core`` is provided.
+        n_clad : float or callable, optional
+            Cladding refractive index ``n(lambda)`` used if neither ``clad`` nor
+            ``eps_clad`` is provided.
+        mu_core : float or callable, default=1.0
+            Core relative permeability ``mu(lambda)``.
+        mu_clad : float or callable, default=1.0
+            Cladding relative permeability ``mu(lambda)``.
+        exp_type : str, default="exp_minus_i_omega_t"
+            Passed to ``RefractiveIndexMaterial.get_eps`` when ``core``/``clad`` are provided.
         real_eps_from_material : if True, use n^2 (real). If False and k is available in
                                  the database, use (n ± i k)^2 depending on exp_type.
         """
 
         self.core_radius = _strip_unit(core_radius, units.m if _HAS_UNITS else None)
+        
+        def _normalize_material(mat, side):
+            if mat is None:
+                return None
+            if isinstance(mat, RefractiveIndexMaterial):
+                return mat
+            if _HAS_REFRACTIVEINDEX and isinstance(mat, RIMaterial):
+                warnings.warn(
+                    f"{side}: received upstream RefractiveIndexMaterial (nm API); "
+                    "auto-wrapping to anafibre RefractiveIndexMaterial (m API).",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                return RefractiveIndexMaterial.from_upstream(mat)
+            raise TypeError(
+                f"{side} must be anafibre.RefractiveIndexMaterial or None; "
+                f"got {type(mat).__name__}"
+            )
+
+        core = _normalize_material(core, "core")
+        clad = _normalize_material(clad, "clad")
         self.core = core
         self.clad = clad
 
@@ -148,18 +253,56 @@ class StepIndexFibre:
         return val
 
     def n_core(self, wavelength):
+        """Return core refractive index at a wavelength.
+
+        Parameters
+        ----------
+        wavelength : float | array-like
+            Wavelength in meters.
+
+        Returns
+        -------
+        float | complex | numpy.ndarray
+            Core refractive index.
+        """
         wl = _strip_unit(wavelength, units.m if _HAS_UNITS else None)
         eps = self._eval(self.eps_core, wl)
         mu = self._eval(self.mu_core, wl)
         return np.sqrt(eps * mu)
 
     def n_clad(self, wavelength):
+        """Return cladding refractive index at a wavelength.
+
+        Parameters
+        ----------
+        wavelength : float | array-like
+            Wavelength in meters.
+
+        Returns
+        -------
+        float | complex | numpy.ndarray
+            Cladding refractive index.
+        """
         wl = _strip_unit(wavelength, units.m if _HAS_UNITS else None)
         eps = self._eval(self.eps_clad, wl)
         mu = self._eval(self.mu_clad, wl)
         return np.sqrt(eps * mu)
 
     def eps(self, r, wavelength):
+        """Return radial relative permittivity profile.
+
+        Parameters
+        ----------
+        r : float | array-like
+            Radial coordinate in meters.
+        wavelength : float | array-like
+            Wavelength in meters.
+
+        Returns
+        -------
+        float | complex | numpy.ndarray
+            Piecewise ``eps_core`` inside the core and ``eps_clad`` outside.
+        """
         rr = _strip_unit(r, units.m if _HAS_UNITS else None)
         wl = _strip_unit(wavelength, units.m if _HAS_UNITS else None)
         return np.where(rr < self.core_radius,
@@ -167,6 +310,20 @@ class StepIndexFibre:
                         self._eval(self.eps_clad, wl))
 
     def mu(self, r, wavelength):
+        """Return radial relative permeability profile.
+
+        Parameters
+        ----------
+        r : float | array-like
+            Radial coordinate in meters.
+        wavelength : float | array-like
+            Wavelength in meters.
+
+        Returns
+        -------
+        float | complex | numpy.ndarray
+            Piecewise ``mu_core`` inside the core and ``mu_clad`` outside.
+        """
         rr = _strip_unit(r, units.m if _HAS_UNITS else None)
         wl = _strip_unit(wavelength, units.m if _HAS_UNITS else None)
         return np.where(rr < self.core_radius,
@@ -174,9 +331,41 @@ class StepIndexFibre:
                         self._eval(self.mu_clad, wl))
 
     def n(self, r, wavelength):
+        """Return radial refractive index profile.
+
+        Parameters
+        ----------
+        r : float | array-like
+            Radial coordinate in meters.
+        wavelength : float | array-like
+            Wavelength in meters.
+
+        Returns
+        -------
+        float | complex | numpy.ndarray
+            Refractive index profile ``sqrt(eps * mu)``.
+        """
         return np.sqrt(self.eps(r, wavelength) * self.mu(r, wavelength))
 
     def V(self, wavelength):
+        """Compute normalized frequency parameter ``V``.
+
+        Parameters
+        ----------
+        wavelength : float | array-like
+            Wavelength in meters.
+
+        Returns
+        -------
+        float | numpy.ndarray
+            Normalized frequency ``V = k0 a sqrt(n_core^2 - n_clad^2)``.
+
+        Notes
+        -----
+        This corresponds to the paper definition
+        $V=k_0\\rho_0\\sqrt{n_1^2-n_2^2}$,
+        where $\\rho_0$ is the core radius.
+        """
         wl = _strip_unit(wavelength, units.m if _HAS_UNITS else None)
         n1 = self.n_core(wl)
         n2 = self.n_clad(wl)
@@ -184,6 +373,23 @@ class StepIndexFibre:
         return k0 * self.core_radius * np.sqrt(n1**2 - n2**2)
 
     def wavelength_from_V_legacy(self, V):
+        """Closed-form inversion of ``V`` for constant-index fibres.
+
+        Parameters
+        ----------
+        V : float | array-like
+            Normalized frequency.
+
+        Returns
+        -------
+        float | numpy.ndarray
+            Wavelength in meters.
+
+        Raises
+        ------
+        ValueError
+            If ``n_core <= n_clad``.
+        """
         # raise ValueError("Ha! This method is not implemented in StepIndexFibre. Use a different method to compute wavelength from V.")
         n1 = self.n_core(1.0)
         n2 = self.n_clad(1.0)
@@ -206,10 +412,36 @@ class StepIndexFibre:
         _grid_pts=64,
     ):
         """
-        Invert V(λ) = (2π a / λ) * sqrt(n_core(λ)^2 - n_clad(λ)^2) for λ.
+        Invert ``V(lambda)`` to obtain wavelength.
 
-        Works when eps_core/mu_core/eps_clad/mu_clad are constants or callables of wavelength [m].
-        Returns np.inf for V==0. Vectorized over V.
+        Parameters
+        ----------
+        V : float | array-like
+            Target normalized frequency value(s).
+        wl_bracket : tuple[float, float], default=(2e-7, 5e-6)
+            Search interval in meters used when material properties are wavelength-dependent.
+        rtol : float, default=1e-12
+            Relative tolerance for scalar root solving.
+        maxiter : int, default=100
+            Maximum iterations for scalar root solving.
+        _grid_pts : int, default=64
+            Number of logarithmic sampling points used to bracket roots.
+
+        Returns
+        -------
+        float | numpy.ndarray
+            Wavelength in meters. ``V == 0`` maps to ``np.inf``.
+
+        Raises
+        ------
+        ValueError
+            If the bracket is invalid or no wavelength in the bracket reaches a target ``V``.
+
+        Notes
+        -----
+        Solves the implicit equation
+        $V(\\lambda)=\\frac{2\\pi a}{\\lambda}\\sqrt{n_\\mathrm{core}(\\lambda)^2-n_\\mathrm{clad}(\\lambda)^2}$.
+        For constant material parameters, the closed-form inverse is used.
         """
         a = self.core_radius
         V = np.asarray(V)
@@ -293,6 +525,40 @@ class StepIndexFibre:
 
     def b(self, ell, m, V=None, wavelength=None, mode_type=None,
           N_b=2000, tol=1e-15, complex_tol=1e-8, maxiter=100):
+        """Return normalized propagation constant ``b`` for a guided mode.
+
+        Parameters
+        ----------
+        ell : int
+            Azimuthal mode index.
+        m : int
+            Radial mode index (1-based).
+        V : float | array-like, optional
+            Normalized frequency values.
+        wavelength : float | array-like, optional
+            Wavelength values in meters.
+        mode_type : {"TE", "TM", None}, optional
+            Mode family selector for ``ell == 0``.
+        N_b : int, default=2000
+            Number of samples used for root bracketing.
+        tol : float, default=1e-15
+            Real root-finder tolerance.
+        complex_tol : float, default=1e-8
+            Complex root acceptance tolerance.
+        maxiter : int, default=100
+            Maximum iterations for complex root refinement.
+
+        Returns
+        -------
+        float | complex | numpy.ndarray
+            Guided root(s) ``b``.
+
+        Notes
+        -----
+        $b$ is the normalized propagation constant used in the paper:
+        $b=\\frac{n_\\mathrm{eff}^2-n_2^2}{n_1^2-n_2^2}$, constrained to $[0,1]$ for
+        guided modes in lossless conditions.
+        """
         if V is not None:
             return find_b_of_V(self, ell, m, V=V, mode_type=mode_type, N_b=N_b, tol=tol, complex_tol=complex_tol, maxiter=maxiter)
         elif wavelength is not None:
@@ -301,6 +567,31 @@ class StepIndexFibre:
             raise ValueError("Specify either V or wavelength.")
 
     def neff(self, ell, m, V=None, wavelength=None, mode_type=None, **kwargs):
+        """Return effective index for a selected guided mode.
+
+        Parameters
+        ----------
+        ell, m : int
+            Azimuthal and radial mode indices.
+        V : float | array-like, optional
+            Normalized frequency values.
+        wavelength : float | array-like, optional
+            Wavelength values in meters.
+        mode_type : {"TE", "TM", None}, optional
+            Mode family selector for ``ell == 0``.
+        **kwargs
+            Forwarded to :meth:`b` (for example ``N_b``, ``tol``).
+
+        Returns
+        -------
+        float | complex | numpy.ndarray
+            Effective index ``n_eff``.
+
+        Notes
+        -----
+        Equivalent to composing :meth:`b` with
+        $n_\\mathrm{eff}(b)=\\sqrt{b\\,n_1^2+(1-b)\\,n_2^2}$.
+        """
         if wavelength is not None:
             wl = wavelength
         elif V is not None:
@@ -311,6 +602,30 @@ class StepIndexFibre:
         return b_to_neff(self, b_val, wl)
 
     def kz(self, ell, m, V=None, wavelength=None, mode_type=None, **kwargs):
+        """Return longitudinal propagation constant for a guided mode.
+
+        Parameters
+        ----------
+        ell, m : int
+            Azimuthal and radial mode indices.
+        V : float | array-like, optional
+            Normalized frequency values.
+        wavelength : float | array-like, optional
+            Wavelength values in meters.
+        mode_type : {"TE", "TM", None}, optional
+            Mode family selector for ``ell == 0``.
+        **kwargs
+            Forwarded to :meth:`b` (for example ``N_b``, ``tol``).
+
+        Returns
+        -------
+        float | complex | numpy.ndarray
+            Propagation constant ``k_z`` in rad/m.
+
+        Notes
+        -----
+        Uses $k_z=n_\\mathrm{eff}k_0$ with $k_0=2\\pi/\\lambda$.
+        """
         if wavelength is not None:
             wl = wavelength
         elif V is not None:
@@ -341,18 +656,44 @@ class StepIndexFibre:
         -------
         float or ndarray
             Value of the dispersion equation F(b, V).
+
+        Notes
+        -----
+        This is the API-level wrapper of :func:`anafibre.dispersion.F_dispersion`,
+        corresponding to the regularized scalar dispersion function used for robust
+        root-finding in the paper.
         """
         return F_dispersion(self, ell, b, V=V, wavelength=wavelength, mode_type=mode_type)
 
     def nu_vs_V(self, ell, m, V_vals, *, mode_type=None):
         """
-        Compute ν(V) for a given (ell, m) following the definition used in fields._compute_amplitudes:
+        Compute the hybrid-mode parameter ``nu`` as a function of $V$.
 
-            nu_eps = 1j * phi_eps / (ell * ne)
-            nu = sqrt(-phi_eps / phi_mu + 0j)
-            if real(nu * conj(nu_eps)) < 0: nu = -nu
+        Parameters
+        ----------
+        ell : int
+            Azimuthal mode index (must be non-zero).
+        m : int
+            Radial mode index.
+        V_vals : array-like
+            Normalized frequency samples.
+        mode_type : {"TE", "TM", None}, optional
+            Reserved for consistency; used when resolving ``b(V)``.
 
-        Returns (nu, mask_valid) with mask_valid True where a guided solution exists (0<b<1).
+        Returns
+        -------
+        tuple[numpy.ndarray, numpy.ndarray]
+            ``(nu, mask_valid)`` where ``mask_valid`` marks finite guided solutions.
+
+        Notes
+        -----
+        For hybrid modes, this follows the analytical amplitude ratio used in the
+        paper:
+
+        - $\\nu_\\varepsilon=i\\,\\phi_\\varepsilon/(\\ell n_\\mathrm{eff})$
+        - $\\nu=\\sqrt{-\\phi_\\varepsilon/\\phi_\\mu+0j}$
+
+        with branch sign fixed by $\\mathrm{Re}(\\nu\\,\\nu_\\varepsilon^*)\\ge 0$.
         """
         import numpy as np
         from scipy.special import jv, jvp, kve
@@ -402,14 +743,32 @@ class StepIndexFibre:
 
     def sigma_vs_V(self, ell, m, V_vals, *, mode_type=None, atol=1e-9):
         """
-        Compute σ(V) used in power normalisation (see GuidedMode._power_normalisation),
-        vectorised over V for a given (ell, m).
+        Compute mode normalization coefficient $\\sigma(V)$.
 
-        For ell==0, please specify mode_type ('TE' or 'TM'). If None, this function will
-        attempt to infer TE/TM where possible by checking phi_mu≈0 or phi_eps≈0, but this
-        may be ambiguous across V; providing mode_type is recommended.
+        Parameters
+        ----------
+        ell : int
+            Azimuthal mode index.
+        m : int
+            Radial mode index.
+        V_vals : array-like
+            Normalized frequency samples.
+        mode_type : {"TE", "TM", None}, optional
+            Required for robust ``ell == 0`` classification.
+        atol : float, default=1e-9
+            Tolerance used when inferring TE/TM from dispersion terms.
 
-        Returns (sigma, mask_valid) where mask_valid selects guided solutions (0<b<1) and finite values.
+        Returns
+        -------
+        tuple[numpy.ndarray, numpy.ndarray]
+            ``(sigma, mask_valid)`` where ``mask_valid`` marks finite guided solutions.
+
+        Notes
+        -----
+        $\\sigma$ is the modal normalization coefficient entering
+        $P=c_0|N|^2\\sigma$ in the paper's power normalization derivation.
+        The implementation uses the closed-form $I_+$ and $I_-$ radial-integral
+        expressions (no numerical quadrature).
         """
         import numpy as np
         from scipy.special import jv, jvp, kve
@@ -518,7 +877,23 @@ class StepIndexFibre:
     
     def m_max(self, ell, wavelength, mode_type=None, N_b=2000, tol=1e-15, complex_tol=1e-8, maxiter=100):
         """
-        Return the maximum allowed radial mode number m for given ell and V.
+        Find the highest guided radial index ``m`` for fixed ``ell`` and wavelength.
+
+        Parameters
+        ----------
+        ell : int
+            Azimuthal mode index.
+        wavelength : float
+            Wavelength in meters.
+        mode_type : {"TE", "TM", None}, optional
+            Mode family selector for ``ell == 0``.
+        N_b, tol, complex_tol, maxiter
+            Root-finding controls passed to :meth:`b`.
+
+        Returns
+        -------
+        int
+            Largest guided radial index, or ``0`` if no guided solution exists.
         """
         def _is_guided_root(b_val):
             if not np.isfinite(b_val):
@@ -537,9 +912,25 @@ class StepIndexFibre:
     
     def ell_max(self, wavelength, m=1, mode_type=None, N_b=2000, tol=1e-15, complex_tol=1e-8, maxiter=100, ell_max_search=100):
         """
-        Return the maximum allowed azimuthal mode number ell for given V.
-        By default, checks for fundamental radial mode (m=1) for increasing ell.
-        ell_max_search is a safety limit to prevent infinite loops.
+        Find the highest guided azimuthal index ``ell`` for fixed radial order.
+
+        Parameters
+        ----------
+        wavelength : float
+            Wavelength in meters.
+        m : int, default=1
+            Radial mode index to track while increasing ``ell``.
+        mode_type : {"TE", "TM", None}, optional
+            Mode family selector for ``ell == 0``.
+        N_b, tol, complex_tol, maxiter
+            Root-finding controls passed to :meth:`b`.
+        ell_max_search : int, default=100
+            Maximum ``ell`` value checked before stopping.
+
+        Returns
+        -------
+        int
+            Largest guided azimuthal index found, or ``-1`` if none exists.
         """
         def _is_guided_root(b_val):
             if not np.isfinite(b_val):
@@ -573,6 +964,18 @@ class StepIndexFibre:
         return max_valid_ell
     
     def list_modes_at(self, wavelength):
+        """Enumerate all guided modes at a given wavelength.
+
+        Parameters
+        ----------
+        wavelength : float
+            Wavelength in meters.
+
+        Returns
+        -------
+        anafibre.utils.GuidedModeList
+            Guided modes sorted by decreasing ``n_eff``.
+        """
         from .utils import GuidedModeList
 
         ## Calculate and display guided modes
@@ -599,24 +1002,88 @@ class StepIndexFibre:
         return GuidedModeList(modes)
     # -------------------------- mode construction ----------------------------
     def HE(self, ell, n, wl, **kwargs):
-        """Return an HE mode (ell>0, odd m)."""
+        """Construct an ``HE_{ell,n}`` mode.
+
+        Parameters
+        ----------
+        ell : int
+            Azimuthal mode index (``ell > 0``).
+        n : int
+            Radial index in HE/EH notation (mapped to internal odd ``m``).
+        wl : float
+            Wavelength in meters.
+        **kwargs
+            Forwarded to :class:`anafibre.fields.GuidedMode`.
+
+        Returns
+        -------
+        anafibre.fields.GuidedMode
+            Guided HE mode object.
+        """
         m = 2 * n - 1
         return GuidedMode(self, ell=ell, m=m, wavelength=wl,
                           mode_type="HE", **kwargs)
 
     def EH(self, ell, n, wl, **kwargs):
-        """Return an EH mode (ell>0, even m)."""
+        """Construct an ``EH_{ell,n}`` mode.
+
+        Parameters
+        ----------
+        ell : int
+            Azimuthal mode index (``ell > 0``).
+        n : int
+            Radial index in HE/EH notation (mapped to internal even ``m``).
+        wl : float
+            Wavelength in meters.
+        **kwargs
+            Forwarded to :class:`anafibre.fields.GuidedMode`.
+
+        Returns
+        -------
+        anafibre.fields.GuidedMode
+            Guided EH mode object.
+        """
         m = 2 * n
         return GuidedMode(self, ell=ell, m=m, wavelength=wl,
                           mode_type="EH", **kwargs)
 
     def TE(self, n, wl, **kwargs):
-        """Return a TE₀m mode (ell=0)."""
+        """Construct a ``TE_{0,n}`` mode.
+
+        Parameters
+        ----------
+        n : int
+            Radial mode index.
+        wl : float
+            Wavelength in meters.
+        **kwargs
+            Forwarded to :class:`anafibre.fields.GuidedMode`.
+
+        Returns
+        -------
+        anafibre.fields.GuidedMode
+            Guided TE mode object.
+        """
         return GuidedMode(self, ell=0, m=n, wavelength=wl,
                           mode_type="TE", **kwargs)
 
     def TM(self, n, wl, **kwargs):
-        """Return a TM₀m mode (ell=0)."""
+        """Construct a ``TM_{0,n}`` mode.
+
+        Parameters
+        ----------
+        n : int
+            Radial mode index.
+        wl : float
+            Wavelength in meters.
+        **kwargs
+            Forwarded to :class:`anafibre.fields.GuidedMode`.
+
+        Returns
+        -------
+        anafibre.fields.GuidedMode
+            Guided TM mode object.
+        """
         return GuidedMode(self, ell=0, m=n, wavelength=wl,
                           mode_type="TM", **kwargs)
     

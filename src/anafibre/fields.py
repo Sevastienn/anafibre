@@ -33,12 +33,38 @@ import warnings
 # ---------------------------- small helpers ---------------------------------
 
 def spin_to_cartesian(F0, Fp, Fm):
+    """Convert spin-basis field components to Cartesian components.
+
+    Parameters
+    ----------
+    F0, Fp, Fm : array-like
+        Longitudinal and circular transverse spin components.
+
+    Returns
+    -------
+    numpy.ndarray
+        Array with last axis ``(Fx, Fy, Fz)``.
+    """
     Ex = (Fp + Fm) / np.sqrt(2)
     Ey = 1j * (Fp - Fm) / np.sqrt(2)
     Ez = F0
     return np.stack([Ex, Ey, Ez], axis=-1)
 
 def cartesian_to_cylindrical(F_cart, phi):
+    """Convert Cartesian vectors to cylindrical components.
+
+    Parameters
+    ----------
+    F_cart : array-like
+        Vector field with last axis ``(Fx, Fy, Fz)``.
+    phi : array-like
+        Azimuth angle in radians.
+
+    Returns
+    -------
+    numpy.ndarray
+        Vector field with last axis ``(F_rho, F_phi, F_z)``.
+    """
     Fx = F_cart[..., 0]
     Fy = F_cart[..., 1]
     Fz = F_cart[..., 2]
@@ -47,6 +73,20 @@ def cartesian_to_cylindrical(F_cart, phi):
     return np.stack([F_rho, F_phi, Fz], axis=-1)
 
 def cylindrical_to_cartesian(F_cyl, phi):
+    """Convert cylindrical vectors to Cartesian components.
+
+    Parameters
+    ----------
+    F_cyl : array-like
+        Vector field with last axis ``(F_rho, F_phi, F_z)``.
+    phi : array-like
+        Azimuth angle in radians.
+
+    Returns
+    -------
+    numpy.ndarray
+        Vector field with last axis ``(Fx, Fy, Fz)``.
+    """
     F_rho = F_cyl[..., 0]
     F_phi = F_cyl[..., 1]
     Fz = F_cyl[..., 2]
@@ -55,7 +95,20 @@ def cylindrical_to_cartesian(F_cyl, phi):
     return np.stack([Fx, Fy, Fz], axis=-1)
 
 def format_complex_auto(z, tol=1e-14):
-    """Format complex/Quantity like Python default, but omit near-zero parts."""
+    """Format a complex scalar (or quantity) with compact zero suppression.
+
+    Parameters
+    ----------
+    z : complex | astropy.units.Quantity
+        Value to format.
+    tol : float, default=1e-14
+        Threshold below which real/imaginary parts are treated as zero.
+
+    Returns
+    -------
+    str
+        Human-readable complex number string, including unit suffix if present.
+    """
     unit_str = ""
     if _HAS_UNITS and hasattr(z, "unit"):
         unit_str = f" {z.unit}"
@@ -75,6 +128,11 @@ class ModeNotFoundError(RuntimeError):
 # ---------------------------- core class ------------------------------------
 
 class GuidedMode:
+    """Analytical representation of one guided mode at fixed wavelength.
+
+    A ``GuidedMode`` stores the solved modal constants and exposes methods to
+    evaluate electric/magnetic phasors and their derivatives on arbitrary grids.
+    """
     def __init__(self, fibre, ell, m, wavelength, mode_type=None, N_b=2000, *, a=1.0, a_plus=None, a_minus=None):
         self.fibre = fibre
         self.ell = ell
@@ -124,24 +182,90 @@ class GuidedMode:
 
     # ----------------------- material/geometry wrappers ----------------------
     def eps(self, rho):
+        """Evaluate relative permittivity at radial coordinate(s).
+
+        Parameters
+        ----------
+        rho : float | array-like
+            Radial coordinate in meters.
+
+        Returns
+        -------
+        float | complex | numpy.ndarray
+            Relative permittivity.
+        """
         return self.fibre.eps(rho, self.wavelength)
 
     def mu(self, rho):
+        """Evaluate relative permeability at radial coordinate(s).
+
+        Parameters
+        ----------
+        rho : float | array-like
+            Radial coordinate in meters.
+
+        Returns
+        -------
+        float | complex | numpy.ndarray
+            Relative permeability.
+        """
         return self.fibre.mu(rho, self.wavelength)
 
     def n(self, rho):
+        """Evaluate refractive index at radial coordinate(s).
+
+        Parameters
+        ----------
+        rho : float | array-like
+            Radial coordinate in meters.
+
+        Returns
+        -------
+        float | complex | numpy.ndarray
+            Refractive index.
+        """
         return self.fibre.n(rho, self.wavelength)
 
     def k(self, rho):
+        """Evaluate local wave number ``k = k0 * n(rho)``.
+
+        Parameters
+        ----------
+        rho : float | array-like
+            Radial coordinate in meters.
+
+        Returns
+        -------
+        float | complex | numpy.ndarray
+            Local wave number in rad/m.
+        """
         return self.k0 * self.n(rho)
 
     def kap(self, rho):
+        """Evaluate local transverse wave number.
+
+        Parameters
+        ----------
+        rho : float | array-like
+            Radial coordinate in meters.
+
+        Returns
+        -------
+        complex | numpy.ndarray
+            ``sqrt(k(rho)^2 - kz^2)`` with complex branch support.
+        """
         k = self.k(rho)
         return np.sqrt(k**2 - self.kz**2 + 0j)
 
     # -------------------------- cache management -----------------------------
     def clear_grid_cache(self):
-        """Drop all cached grids and precomputations for this mode."""
+        """Clear cached grid-dependent intermediate arrays.
+
+        Returns
+        -------
+        None
+            Empties the per-instance grid cache.
+        """
         self._grid_cache.clear()
 
     @staticmethod
@@ -182,6 +306,18 @@ class GuidedMode:
 
     # -------------------------- amplitudes/normalisation ---------------------
     def sigma(self, A=None, B=None):
+        """Compute power-normalization coefficient for modal amplitudes.
+
+        Parameters
+        ----------
+        A, B : complex, optional
+            Longitudinal-field coefficients. Defaults to the instance values.
+
+        Returns
+        -------
+        complex | float
+            Modal normalization coefficient used in amplitude normalization.
+        """
         from .dispersion import _wDlnK
         fibre = self.fibre
         ell = int(abs(self.ell))
@@ -249,7 +385,8 @@ class GuidedMode:
         w = V * np.sqrt(b)
 
         DlnJ = (jvp(ell, u) / jv(ell, u))
-        DlnK = -(kve(ell - 1, w) + kve(ell+1, w))/(2*kve(ell, w))
+        # DlnK = -(kve(ell - 1, w) + kve(ell+1, w))/(2*kve(ell, w))
+        DlnK = _wDlnK(ell, w)/w
 
         phi_eps = ((u * w / V) ** 2) * (eps1 / u * DlnJ + eps2 / w * DlnK)
         phi_mu  = ((u * w / V) ** 2) * (mu1 / u * DlnJ + mu2 / w * DlnK)
@@ -533,6 +670,29 @@ class GuidedMode:
 
     # ------------------------------- public API ------------------------------
     def E(self, rho=None, phi=None, z=0, *, x=None, y=None):
+        """Evaluate electric field phasor on a transverse grid.
+
+        Parameters
+        ----------
+        rho, phi : array-like, optional
+            Cylindrical coordinates in meters/radians.
+        z : float | array-like, default=0
+            Longitudinal position in meters.
+        x, y : array-like, optional
+            Cartesian coordinates in meters.
+
+        Returns
+        -------
+        numpy.ndarray
+            Complex electric field with last axis ``(Ex, Ey, Ez)``.
+
+        Notes
+        -----
+        The returned phasor is built from the cylindrical-mode expansion
+        $\\sum_s E^{(s)}(\\rho)\\,\\mathbf{e}_s\\,e^{i(\\ell-s)\\phi}e^{ik_z z}$, with optional
+        superposition of degenerate ``+/-ell`` partners via ``a_plus`` and
+        ``a_minus``.
+        """
         (rho_f, phi_f, z_f, shape, phi_phase, s_phase, z_phase, R0, Rp, Rm) = self._prepare_grid(
             rho=rho, phi=phi, z=z, x=x, y=y
         )
@@ -550,6 +710,27 @@ class GuidedMode:
         return spin_to_cartesian(F0, Fp, Fm).reshape(*shape, 3)
     
     def H(self, rho=None, phi=None, z=0, *, x=None, y=None):
+        """Evaluate magnetic field phasor on a transverse grid.
+
+        Parameters
+        ----------
+        rho, phi : array-like, optional
+            Cylindrical coordinates in meters/radians.
+        z : float | array-like, default=0
+            Longitudinal position in meters.
+        x, y : array-like, optional
+            Cartesian coordinates in meters.
+
+        Returns
+        -------
+        numpy.ndarray
+            Complex magnetic field with last axis ``(Hx, Hy, Hz)``.
+
+        Notes
+        -----
+        Uses the same modal ansatz and phase convention as :meth:`E`, with magnetic
+        spin components linked to electric ones through Maxwell-coupled amplitudes.
+        """
         (rho_f, phi_f, z_f, shape, phi_phase, s_phase, z_phase, R0, Rp, Rm) = self._prepare_grid(
             rho=rho, phi=phi, z=z, x=x, y=y
         )
@@ -567,33 +748,101 @@ class GuidedMode:
         return spin_to_cartesian(F0, Fp, Fm).reshape(*shape, 3)
     
     def gradE(self, rho=None, phi=None, z=0, *, x=None, y=None, coord="cartesian"):
+        """Evaluate spatial Jacobian of the electric field.
+
+        Parameters
+        ----------
+        rho, phi : array-like, optional
+            Cylindrical coordinates in meters/radians.
+        z : float | array-like, default=0
+            Longitudinal position in meters.
+        x, y : array-like, optional
+            Cartesian coordinates in meters.
+        coord : {"cartesian", "cylindrical"}, default="cartesian"
+            Coordinate basis for derivative columns.
+
+        Returns
+        -------
+        numpy.ndarray
+            Array ``J[..., i, j] = dE_i / dx_j``.
+
+        Notes
+        -----
+        Implements the analytical Jacobian derived from the mode ansatz. For
+        ``coord='cylindrical'``, derivative columns are ordered as
+        $(\\partial/\\partial\\rho,\\,(1/\\rho)\\partial/\\partial\\phi,\\,\\partial/\\partial z)$.
+        """
         return self._grad_field("E", rho=rho, phi=phi, z=z, x=x, y=y, coord=coord)
 
     def gradH(self, rho=None, phi=None, z=0, *, x=None, y=None, coord="cartesian"):
+        """Evaluate spatial Jacobian of the magnetic field.
+
+        Parameters
+        ----------
+        rho, phi : array-like, optional
+            Cylindrical coordinates in meters/radians.
+        z : float | array-like, default=0
+            Longitudinal position in meters.
+        x, y : array-like, optional
+            Cartesian coordinates in meters.
+        coord : {"cartesian", "cylindrical"}, default="cartesian"
+            Coordinate basis for derivative columns.
+
+        Returns
+        -------
+        numpy.ndarray
+            Array ``J[..., i, j] = dH_i / dx_j``.
+
+        Notes
+        -----
+        Magnetic-field Jacobian counterpart of :meth:`gradE`, using the same
+        analytical derivative pathway (no finite differences).
+        """
         return self._grad_field("H", rho=rho, phi=phi, z=z, x=x, y=y, coord=coord)
     
     def Power(self, rho=None, phi=None, z=0, *, x=None, y=None,
             auto=None, extent_factor=8.0, N=1000, tol=1e-3, max_iter=8,
             expand_factor=1.5, cache=True, geometry="square"):
         """
-        Compute guided power by integrating <Sz> over the transverse plane.
+        Compute guided power by integrating the time-averaged Poynting flux.
 
-        Manual usage (existing):
-        - Power(x=X, y=Y, z=...)
-        - Power(rho=R, phi=PHI, z=...)
+        Parameters
+        ----------
+        rho, phi : array-like, optional
+            Polar integration grid in meters/radians.
+        z : float, default=0
+            Longitudinal position in meters.
+        x, y : array-like, optional
+            Cartesian integration grid in meters.
+        auto : bool | None, default=None
+            If ``True`` (or ``None`` with no grid given), run adaptive square-grid
+            integration. If ``False``, explicit grid input is required.
+        extent_factor : float, default=8.0
+            Initial half-width in units of core radius for adaptive integration.
+        N : int, default=1000
+            Grid resolution per axis for adaptive integration.
+        tol : float, default=1e-3
+            Relative convergence threshold for adaptive integration.
+        max_iter : int, default=8
+            Maximum number of domain expansions in adaptive mode.
+        expand_factor : float, default=1.5
+            Domain growth multiplier between adaptive iterations.
+        cache : bool, default=True
+            Cache the latest adaptive-integration result.
+        geometry : {"square"}, default="square"
+            Adaptive integration geometry.
 
-        Auto usage (new):
-        - Power(z=...) or Power()
-            -> integrates on an expanding square grid until convergence.
+        Returns
+        -------
+        float
+            Estimated guided power crossing the transverse plane.
 
-        Parameters for auto:
-        extent_factor : initial half-width L = extent_factor * core_radius
-        N            : grid resolution (NxN)
-        tol          : relative convergence tolerance on power
-        max_iter     : max expansion iterations
-        expand_factor: domain expansion multiplier each iteration
-        cache        : cache last auto result per settings
-        geometry     : currently only "square" is implemented for auto
+        Notes
+        -----
+        Computes the time-averaged power
+        $P=\\frac{1}{2}\\int \\mathrm{Re}(\\mathbf{E}\\times\\mathbf{H}^*)\\cdot\\hat{\\mathbf{z}}\\,dA$
+        over the transverse plane. This is the numerical counterpart of the
+        analytical normalization relation used for $\\sigma$ in the paper.
         """
         # --- 1) Manual Cartesian grid (existing path) ---
         if x is not None or y is not None:
@@ -700,6 +949,13 @@ class GuidedMode:
 
     # ------------------------------ labelling --------------------------------
     def mode_label(self):
+        """Return HTML-formatted mode family label.
+
+        Returns
+        -------
+        str
+            Label such as ``HE<sub>11</sub>`` or ``TE<sub>01</sub>``.
+        """
         if self.ell == 0:
             mt = (self.mode_type or "").upper()
             if mt not in {"TE", "TM"}:

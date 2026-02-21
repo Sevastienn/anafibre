@@ -36,7 +36,7 @@ license-files = ["LICEN[CS]E*"]
 
 [project.optional-dependencies]
 units = ["astropy>=4.0.0"]
-refractiveindex = ["refractiveindex>=0.1.0"]
+refractiveindex = ["refractiveindex<1.0.0"]
 all = ["anafibre[units,refractiveindex]"]
 
 [project.urls]

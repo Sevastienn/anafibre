@@ -61,7 +61,7 @@ all = [
 [project.urls]
 Homepage = "https://github.com/Sevastienn/anafibre"
 Repository = "https://github.com/Sevastienn/anafibre"
-Documentation = "https://github.com/Sevastienn/anafibre#readme"
+Documentation = "https://anafibre.readthedocs.io/"
 Issues = "https://github.com/Sevastienn/anafibre/issues"
 
 [tool.hatch.version]

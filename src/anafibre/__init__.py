@@ -14,46 +14,63 @@ dispersion characteristics.
 License: MIT
 """
 
-__version__ = "0.1.0"
-__author__ = "Sebastian Golat"
-__email__ = "sebastian.golat@gmail.com"
+import importlib
+
+__version__     = "0.1.2"
+__author__      = "Sebastian Golat"
+__email__       = "sebastian.golat@gmail.com"
 __description__ = "Analytical mode solver for cylindrical step-index fibers"
-__license__ = "MIT"
+__license__     = "MIT"
 
 from .fibre import StepIndexFibre, RefractiveIndexMaterial
 from .fields import GuidedMode
-from .plotting import animate_fields_xy
-from .utils import repr_html_modes
-from IPython.display import display_html, HTML, display
 
-__all__ = ["StepIndexFibre", "GuidedMode", "RefractiveIndexMaterial", "animate_fields_xy", "repr_html_modes", "display_modes", "display_anim"]
+_LAZY_SUBMODULES = {
+    "plotting",
+    "fields",
+    "dispersion",
+    "utils",
+    "fibre",
+}
 
-def display_modes(*modes):
-    """Render one or more guided modes as an HTML table in notebooks.
 
-    Parameters
-    ----------
-    *modes
-        One or more :class:`anafibre.fields.GuidedMode` objects.
+def animate_fields_xy(*args, **kwargs):
+    from .plotting import animate_fields_xy as _animate_fields_xy
+    return _animate_fields_xy(*args, **kwargs)
 
-    Returns
-    -------
-    None
-        Displays HTML output via IPython.
-    """
-    display_html(repr_html_modes(modes), raw=True)
 
-def display_anim(anim):
-    """Render a Matplotlib animation inline in notebooks.
+def display_modes(*args, **kwargs):
+    from .utils import display_modes as _display_modes
+    return _display_modes(*args, **kwargs)
 
-    Parameters
-    ----------
-    anim : matplotlib.animation.Animation
-        Animation instance with a ``to_jshtml`` method.
 
-    Returns
-    -------
-    None
-        Displays the animation via IPython HTML output.
-    """
-    display(HTML(anim.to_jshtml()))
+def display_anim(*args, **kwargs):
+    from .utils import display_anim as _display_anim
+    return _display_anim(*args, **kwargs)
+
+
+def __getattr__(name):
+    if name in _LAZY_SUBMODULES:
+        mod = importlib.import_module(f".{name}", __name__)
+        globals()[name] = mod
+        return mod
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__():
+    return sorted(list(globals().keys()) + list(_LAZY_SUBMODULES))
+
+
+__all__ = [
+    "StepIndexFibre",
+    "GuidedMode",
+    "RefractiveIndexMaterial",
+    "animate_fields_xy",
+    "display_modes",
+    "display_anim",
+    "plotting",
+    "fields",
+    "dispersion",
+    "utils",
+    "fibre",
+]

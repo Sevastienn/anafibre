@@ -1,18 +1,16 @@
 """
-plotting.py
-
 Functions for visualizing dispersion relations, mode profiles, and wavelength spectra.
 """
 
-import numpy as np
-import matplotlib.pyplot as plt
-from scipy.special import jn_zeros
-from mpl_toolkits.axes_grid1 import make_axes_locatable
 import matplotlib as mpl
-from matplotlib.colors import Normalize, ListedColormap, hsv_to_rgb
-from .utils import wavelength_to_rgb
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.colors import ListedColormap, Normalize, hsv_to_rgb
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+from scipy.special import jn_zeros
+
 from .dispersion import F_dispersion
-from .utils import units, _HAS_UNITS
+from .utils import _HAS_UNITS, units, wavelength_to_rgb
 
 
 def plot_dispersion_chart(
@@ -136,7 +134,7 @@ def plot_dispersion_chart(
 def plot_dispersion_vs_wavelength(
     fibre,
     ell=1,
-    wavelength_min=400.0, wavelength_max=700.0, Npoints=500,    # in nanometers
+    wl_min=400.0, wl_max=700.0, Npoints=500,    # in nanometers
     bmin=0, bmax=1,
     mode_type=None,
     show_bessel_zeros=True,
@@ -159,7 +157,7 @@ def plot_dispersion_vs_wavelength(
         Fibre model instance.
     ell : int, default=1
         Azimuthal mode index.
-    wavelength_min, wavelength_max : float, default=(400.0, 700.0)
+    wl_min, wl_max : float, default=(400.0, 700.0)
         Wavelength range in nanometers.
     Npoints : int, default=500
         Sampling resolution in each axis.
@@ -198,7 +196,7 @@ def plot_dispersion_vs_wavelength(
     """
 
     # Build wavelength array (meters)
-    lam_nm = np.linspace(float(wavelength_min), float(wavelength_max), int(Npoints))
+    lam_nm = np.linspace(float(wl_min), float(wl_max), int(Npoints))
     lam_m = lam_nm * 1e-9
 
     # Helper: try user-provided conversion methods first
@@ -396,7 +394,14 @@ def plot_dispersion_vs_wavelength(
     plt.tight_layout()
     return ax
 
-def add_visible_spectrum(ax, position=[0, 0, 1, 0.01], wavelengths=np.linspace(400, 700, 300), xlim=None, resolution=300):
+def add_visible_spectrum(
+    ax,
+    position=[0, 0, 1, 0.01],
+    wls=np.linspace(400, 700, 300),
+    xlim=None,
+    resolution=300,
+    xcoords=None,
+):
     """
     Adds a visible spectrum color strip below the x-axis of a given plot.
 
@@ -406,148 +411,45 @@ def add_visible_spectrum(ax, position=[0, 0, 1, 0.01], wavelengths=np.linspace(4
         Axis where the strip will be added.
     position : list of 4 floats
         Inset position [x, y, width, height] in axes coordinates.
-    wavelengths : array-like
+    wls : array-like
         Wavelengths in nanometers to map to RGB.
     xlim : tuple, optional
         If provided, overrides the wavelength range.
     resolution : int
         Number of color points.
+    xcoords : array-like, optional
+        X-axis coordinates where colors should be placed. If provided, the
+        color is determined from ``wls`` (nm) and positioned along
+        ``xcoords``. Useful when the axis is not wavelength (e.g. ``V``).
 
     Returns
     -------
     None
         Adds an inset spectrum strip to ``ax``.
     """
+    wls = np.asarray(wls, dtype=float)
     if xlim is not None:
-        wavelengths = np.linspace(xlim[0], xlim[1], resolution)
+        wls = np.linspace(xlim[0], xlim[1], resolution)
 
-    colors = [wavelength_to_rgb(w) for w in wavelengths]
+    if xcoords is not None:
+        xcoords = np.asarray(xcoords, dtype=float)
+        if xcoords.size != wls.size:
+            raise ValueError("xcoords and wavelengths must have the same length")
+        if xcoords.size < 2:
+            raise ValueError("xcoords and wavelengths must contain at least two points")
+        xgrid = np.linspace(xcoords[0], xcoords[-1], resolution)
+        wlgrid = np.interp(xgrid, xcoords, wls)
+        colors = [wavelength_to_rgb(w) for w in wlgrid]
+        x0, x1 = xgrid[0], xgrid[-1]
+    else:
+        colors = [wavelength_to_rgb(w) for w in wls]
+        x0, x1 = wls[0], wls[-1]
 
     ax2 = ax.inset_axes(position, transform=ax.transAxes)
-    ax2.imshow([colors], aspect='auto', extent=[wavelengths[0], wavelengths[-1], 0, 1])
+    ax2.imshow([colors], aspect='auto', extent=[x0, x1, 0, 1])
     ax2.set_xticks([])
     ax2.set_yticks([])
     ax2.axis('off')
-
-def plot_nu_vs_V(
-    fibre, ell, m, *, Vmin=0.0, Vmax=10.0, Npoints=400, mode_type=None,
-    ax=None, show=('real', 'imag'), title=None
-):
-    """
-    Plot components of ``nu(V)`` for one modal branch.
-
-    Parameters
-    ----------
-    fibre : anafibre.fibre.StepIndexFibre
-        Fibre model instance.
-    ell, m : int
-        Azimuthal and radial mode indices.
-    Vmin, Vmax : float, default=(0.0, 10.0)
-        Horizontal-axis bounds.
-    Npoints : int, default=400
-        Number of sampled ``V`` points.
-    mode_type : {"TE", "TM", None}, optional
-        Mode family selector for ``ell == 0`` cases.
-    ax : matplotlib.axes.Axes, optional
-        Existing axis to draw on.
-    show : tuple[str, ...], default=("real", "imag")
-        Any subset of ``{"real", "imag", "abs", "angle"}``.
-    title : str, optional
-        Reserved title parameter (currently not applied).
-
-    Returns
-    -------
-    matplotlib.axes.Axes
-        Axis containing the plot.
-    """
-    import numpy as np
-    import matplotlib.pyplot as plt
-
-    V = np.linspace(Vmin, Vmax, int(Npoints))
-    nu, mask = fibre.nu_vs_V(ell, m, V, mode_type=mode_type)
-
-    if ax is None:
-        fig, ax = plt.subplots(figsize=(6, 4))
-    else:
-        fig = ax.figure
-
-    Vv = V[mask]
-    nuv = nu[mask]
-
-    show = tuple(s.lower() for s in show)
-    if 'real' in show:
-        ax.plot(Vv, np.real(nuv), label=r'Re($\nu$)')
-    if 'imag' in show:
-        ax.plot(Vv, np.imag(nuv), '--', label=r'Im($\nu$)')
-    if 'abs' in show:
-        ax.plot(Vv, np.abs(nuv), ':', label=r'|$\nu$|')
-    if 'angle' in show:
-        ax.plot(Vv, np.angle(nuv), '-.', label=r'$\angle \nu$')
-
-    ax.set_xlim(Vmin, Vmax)
-    ax.set_xlabel('V')
-    ax.set_ylabel(r'$\nu$')
-    # if title is None:
-    #     ax.set_title(f"$\nu(V) for \ell={ell}, m={m}{' ('+str(mode_type)+')' if mode_type else ''}$")
-    # else:
-    #     ax.set_title(title)
-    ax.grid(True, linestyle=':', alpha=0.6)
-    ax.legend()
-    plt.tight_layout()
-    return ax
-
-def plot_sigma_vs_V(
-    fibre, ell, m, *, Vmin=0.0, Vmax=10.0, Npoints=400, mode_type=None,
-    ax=None, title=None
-):
-    """
-    Plot ``sigma(V)`` used for modal power normalization.
-
-    Parameters
-    ----------
-    fibre : anafibre.fibre.StepIndexFibre
-        Fibre model instance.
-    ell, m : int
-        Azimuthal and radial mode indices.
-    Vmin, Vmax : float, default=(0.0, 10.0)
-        Horizontal-axis bounds.
-    Npoints : int, default=400
-        Number of sampled ``V`` points.
-    mode_type : {"TE", "TM", None}, optional
-        Mode family selector for ``ell == 0`` cases.
-    ax : matplotlib.axes.Axes, optional
-        Existing axis to draw on.
-    title : str, optional
-        Reserved title parameter (currently not applied).
-
-    Returns
-    -------
-    matplotlib.axes.Axes
-        Axis containing the plot.
-    """
-    import numpy as np
-    import matplotlib.pyplot as plt
-
-    V = np.linspace(Vmin, Vmax, int(Npoints))
-    sigma, mask = fibre.sigma_vs_V(ell, m, V, mode_type=mode_type)
-
-    if ax is None:
-        fig, ax = plt.subplots(figsize=(6, 4))
-    else:
-        fig = ax.figure
-
-    ax.plot(V[mask], sigma[mask], label=r"$\sigma(V)$")
-    ax.set_xlim(Vmin, Vmax)
-    ax.set_xlabel('V')
-    ax.set_ylabel(r"$\sigma$ (SI)")
-    # if title is None:
-    #     ax.set_title(f"σ(V) for ℓ={ell}, m={m}{' ('+str(mode_type)+')' if mode_type else ''}")
-    # else:
-    #     ax.set_title(title)
-    ax.grid(True, linestyle=':', alpha=0.6)
-    ax.legend()
-    plt.tight_layout()
-    return ax
 
 def plot_xy_vector_field(
     X, Y, F, ax=None, scale="auto", zscale=None, cmap='RdBu_r', stride=4, title=None,
@@ -595,8 +497,6 @@ def plot_xy_vector_field(
     matplotlib.axes.Axes
         Axis containing the plot.
     """
-    import numpy as np
-    import matplotlib.pyplot as plt
 
     # Get axis units for labels
     def _get_unit_and_val(arr):
@@ -700,7 +600,9 @@ def _values_and_unit(arr, target_unit=None):
 
 def _axis_label_from_unit(name, unit):
     # """Build a LaTeX axis label like $x\,[\mu\mathrm{m}]$ from an astropy Unit (or $x$ if dimensionless/None)."""
-    if unit is None or unit == units.dimensionless_unscaled or unit == units.one:
+    if unit is None:
+        return rf"$\mathit{{{name}}}$"
+    if _HAS_UNITS and (unit == units.dimensionless_unscaled or unit == units.one):
         return rf"$\mathit{{{name}}}$"
     unit_str = unit.to_string('latex').replace('$', '')
     return rf"$\mathit{{{name}}}\,[{unit_str}]$"
@@ -721,7 +623,7 @@ def plot_complex_field(
     phase_ticks=(-np.pi, -np.pi/2, 0.0, np.pi/2, np.pi),
     phase_cmap=plt.cm.hsv,
     mag_cmap="gray",
-    coord_unit=units.um,               # if set (e.g. units.um) convert X,Y to this; otherwise keep their units
+    coord_unit=None,                   # if set (e.g. units.um) convert X,Y to this; otherwise keep their units
     title=None,
     xlabel=None,                       # if None, auto-built from X unit
     ylabel=None,                       # if None, auto-built from Y unit
@@ -758,7 +660,7 @@ def plot_complex_field(
         Cyclic colormap used for phase.
     mag_cmap : str, default="gray"
         Colormap used for magnitude colorbar.
-    coord_unit : astropy.units.Unit, default=units.um
+    coord_unit : astropy.units.Unit, optional
         Target unit for coordinate display when inputs are quantities.
     title, xlabel, ylabel : str, optional
         Plot title and axis labels.
@@ -822,6 +724,9 @@ def plot_complex_field(
     else:
         fig = ax.figure
 
+    if coord_unit is None and _HAS_UNITS:
+        coord_unit = units.um
+
     if X is not None and Y is not None:
         xv, xunit = _values_and_unit(X, coord_unit)
         yv, yunit = _values_and_unit(Y, coord_unit)
@@ -874,7 +779,6 @@ def plot_complex_field(
 
     return fig, ax, cb_phase, cb_mag
 
-
 def plot_complex_field_polar(
     field,
     Rho,
@@ -891,7 +795,7 @@ def plot_complex_field_polar(
     phase_ticks=(-np.pi, -np.pi/2, 0.0, np.pi/2, np.pi),
     phase_cmap=plt.cm.hsv,
     mag_cmap="gray",
-    coord_unit=units.um,               # unit for radial coordinate
+    coord_unit=None,                   # unit for radial coordinate
     core_radius=None,                  # if provided, set rticks at integer multiples of this
     title=None,
     rlabel=None,                       # radial axis label (auto if None)
@@ -936,7 +840,7 @@ def plot_complex_field_polar(
         Whether to display phase and magnitude colorbars.
     phase_cbar_style : {"bar", "wheel", "edge"}, default="wheel"
         Visual style for phase legend.
-    coord_unit : astropy.units.Unit, default=units.um
+    coord_unit : astropy.units.Unit, optional
         Target unit for radial coordinate display.
     core_radius : float | Quantity, optional
         If provided, radial ticks are placed at integer multiples of this value.
@@ -1000,9 +904,13 @@ def plot_complex_field_polar(
     else:
         fig = ax.figure
 
+    if coord_unit is None and _HAS_UNITS:
+        coord_unit = units.um
+
     # Coordinates: convert Rho to coord_unit, Phi to radians
     Rv, runit = _values_and_unit(Rho, coord_unit)
-    Pv, _ = _values_and_unit(Phi, units.rad)
+    phi_target_unit = units.rad if _HAS_UNITS else None
+    Pv, _ = _values_and_unit(Phi, phi_target_unit)
 
     # Ensure 2D grid shapes and facecolors averaged to cell colors (M-1, N-1, 4)
     def _as_2d(a):
@@ -1208,7 +1116,6 @@ def plot_complex_field_polar(
 
     return fig, ax, cb_phase, cb_mag
 
-
 def animate_fields_xy(
     *,
     # --- Option A: give modes (one or many) ---
@@ -1290,8 +1197,6 @@ def animate_fields_xy(
         If neither ``modes`` nor ``fields`` is provided, or if required grids are
         missing for explicit ``fields`` input.
     """
-    import numpy as np
-    import matplotlib.pyplot as plt
     from matplotlib.animation import FuncAnimation
     from scipy.constants import c as c0
 
@@ -1369,7 +1274,7 @@ def animate_fields_xy(
             E = np.asarray(m.E(x=X, y=Y, z=z)) * w
             H = np.asarray(m.H(x=X, y=Y, z=z)) * w
 
-            wl = m.wavelength  # maybe Quantity (e.g. nm)
+            wl = m.wl  # maybe Quantity (e.g. nm)
             wl_m = float(wl.to_value(units.m)) if (_HAS_UNITS and hasattr(wl, "unit")) else float(wl)
             omega = 2.0 * np.pi * c0 / wl_m
             comps.append((E, H, omega))

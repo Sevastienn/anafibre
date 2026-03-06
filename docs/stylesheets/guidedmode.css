@@ -1,0 +1,85 @@
+/* GuidedMode table colors bound to theme variables (auto light/dark) */
+.anafibre-guidedmode table {
+  --af-bg: var(--md-default-bg-color, Canvas);
+  --af-fg: var(--md-default-fg-color, CanvasText);
+  --af-muted: color-mix(in srgb, var(--af-fg) 16%, var(--af-bg));
+  --af-head: color-mix(in srgb, var(--af-fg) 8%, var(--af-bg));
+  --af-row: color-mix(in srgb, var(--af-fg) 4%, var(--af-bg));
+
+  background: var(--af-bg) !important;
+  color: var(--af-fg) !important;
+  border-color: var(--af-muted) !important;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--af-fg) 8%, transparent) !important;
+}
+
+.anafibre-guidedmode th,
+.anafibre-guidedmode td {
+  color: var(--af-fg) !important;
+  border-color: var(--af-muted) !important;
+}
+
+.anafibre-guidedmode thead th {
+  background: var(--af-head) !important;
+}
+
+.anafibre-guidedmode tbody tr td {
+  background: var(--af-bg) !important;
+}
+
+.anafibre-guidedmode tbody tr:nth-child(odd) td {
+  background: var(--af-row) !important;
+}
+
+.md-header__button.md-logo img,
+.md-header__button.md-logo svg {
+    height: 2rem;   /* default ~1.2–1.5rem */
+    width: auto;
+}
+
+/* Only in /api/ pages */
+/* Only pages whose canonical URL contains /api/ */
+html:has(link[rel="canonical"][href*="/api/"]) [data-md-component="content"] h1 {
+  font-family: var(--md-code-font-family);
+  display: inline-block;
+  position: relative;
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.3rem;
+  background: var(--md-code-bg-color);
+  color: var(--md-code-fg-color);
+}
+
+html:has(link[rel="canonical"][href*="/api/"]) [data-md-component="content"] h1 > .headerlink {
+  position: absolute;
+  right: -1.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  padding: 0;
+}
+
+/* tighter space below H1 */
+[data-md-component="content"] h1 {
+  margin-bottom: 0.55rem; /* adjust: 0.2rem to 0.6rem */
+}
+
+/* optional: remove extra top gap from first element after H1 */
+[data-md-component="content"] h1 + * {
+  margin-top: 0;
+}
+
+/* Justify running text in main content */
+.md-typeset p,
+.md-typeset li {
+  text-align: justify;
+  text-justify: inter-word;
+  hyphens: auto;
+}
+
+/* Optional: keep mobile easier to read */
+@media (max-width: 768px) {
+  .md-typeset p,
+  .md-typeset li {
+    text-align: left;
+  }
+}
+

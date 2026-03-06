@@ -1,7 +1,5 @@
 """
-fields.py
-
-Defines the GuidedMode class, which represents a single eigenmode (ℓ, m, λ) of a step-index fiber.
+Defines the GuidedMode class, which represents a single eigenmode $(\\ell, m, \\lambda)$ of a step-index fiber.
 Now includes a lightweight grid cache to avoid recomputing radial functions and phases when
 sampling E/H on the *same* spatial grid repeatedly (e.g., for plotting, power integration,
 animations along z, etc.).
@@ -10,9 +8,9 @@ Cache design (small & safe):
 - Keyed by coordinate system ("xy" or "cyl") and a compact fingerprint of the grid
   (shape, extents, mean step, z if scalar/broadcastable). This avoids storing
   gigantic array hashes and keeps comparisons fast.
-- Stored items: flattened rho/phi/z, shape, precomputed radial functions R0, Rp, Rm,
-  and the longitudinal/azimuthal phase exp(i(kz z + ℓ φ)).
-- Invalidation: automatic whenever A/B, kz, ℓ, wavelength, fibre, or V/b change,
+- Stored items: flattened rho/phi/z, shape, precomputed radial functions $R_0$, $R_+$, $R_-$,
+  and the longitudinal/azimuthal phase $\\exp(i(k_z z + \\ell \\phi))$.
+- Invalidation: automatic whenever A/B, $k_z$, $\\ell$, wavelength, fibre, or $V/b$ change,
   i.e., on new GuidedMode instance. You can also call clear_grid_cache().
 
 Notes:
@@ -20,15 +18,15 @@ Notes:
   you touch in a session. Use clear_grid_cache() if you need to free memory.
 - If you pass a different grid (different shape or spacing), the cache just recomputes and stores it.
 
-Author: Sebastian Golat (extended with grid caching)
 """
 
 import numpy as np
-from scipy.special import jv, kv, jvp, kve
+import warnings
+from scipy.special import jv, kv, jvp
 from scipy.constants import epsilon_0 as eps0, mu_0 as mu0, c as c0
 from .utils import units, _HAS_UNITS, _strip_unit
-from .dispersion import b_to_neff, b_to_kz, _wDlnK
-import warnings
+from .dispersion import b_to_neff, b_to_kz, _wDlnK, Phi_alpha
+
 
 # ---------------------------- small helpers ---------------------------------
 
@@ -133,12 +131,47 @@ class GuidedMode:
     A ``GuidedMode`` stores the solved modal constants and exposes methods to
     evaluate electric/magnetic phasors and their derivatives on arbitrary grids.
     """
-    def __init__(self, fibre, ell, m, wavelength, mode_type=None, N_b=2000, *, a=1.0, a_plus=None, a_minus=None):
+    def __init__(self, fibre, ell, m, wl, mode_type=None, N_b=2000, *, a=1.0, a_plus=None, a_minus=None):
+        """
+        Parameters
+        ----------
+        fibre : anafibre.fibre.StepIndexFibre
+            Parent fibre object used for material/profile and dispersion queries.
+        ell : int
+            Azimuthal mode index.
+        m : int
+            Internal radial mode index (1-based).
+        wl : float | Quantity[m]
+            Wavelength in meters.
+        mode_type : {"HE", "EH", "TE", "TM", None}, optional
+            Mode-family selector. For ``ell=0``, use ``"TE"`` or ``"TM"``.
+            For ``ell>0``, typically ``"HE"`` or ``"EH"``.
+        N_b : int, default=2000
+            Number of samples used for root bracketing when solving for ``b``.
+        a : complex, default=1.0
+            Default superposition coefficient used as ``a_plus`` when
+            ``a_plus``/``a_minus`` are not explicitly provided.
+        a_plus : complex, optional
+            Coefficient of the ``+|ell|`` degenerate partner.
+        a_minus : complex, optional
+            Coefficient of the ``-|ell|`` degenerate partner. Ignored for
+            non-degenerate ``ell=0`` modes.
+
+        Raises
+        ------
+        anafibre.fields.ModeNotFoundError
+            If no guided root exists for the requested ``(ell, m, wl)``.
+
+        Notes
+        -----
+        If neither ``a_plus`` nor ``a_minus`` is provided, the default is
+        ``a_plus=a`` and ``a_minus=0``.
+        """
         self.fibre = fibre
         self.ell = ell
         self.m = m
-        self.wavelength = _strip_unit(wavelength, units.m if _HAS_UNITS else None)
-        # self.wavelength = wavelength
+        self.wl = _strip_unit(wl, units.m if _HAS_UNITS else None)
+        # self.wavelength = wl
         self.mode_type = mode_type
 
         # Optional superposition coefficients for ℓ≠0 (degenerate ±|ℓ| pair)
@@ -164,15 +197,15 @@ class GuidedMode:
         self.a_plus = complex(a_plus)
         self.a_minus = complex(a_minus)
 
-        self.V = fibre.V(wavelength)
-        self.b = fibre.b(ell, m, wavelength=self.wavelength, mode_type=mode_type, N_b=N_b)
+        self.V = fibre.V(wl)
+        self.b = fibre.b(ell, m, wl=self.wl, mode_type=mode_type, N_b=N_b)
         if np.isnan(self.b) or not (0 < self.b < 1):
             raise ModeNotFoundError(
-                f"Mode (ℓ={ell}, m={m}) does not exist at λ={wavelength}."
+                f"Mode (ℓ={ell}, m={m}) does not exist at λ={wl}."
             )
-        self.neff = b_to_neff(fibre, self.b, wavelength=self.wavelength)
-        self.kz = b_to_kz(fibre, self.b, wavelength=self.wavelength)
-        self.k0 = 2 * np.pi / _strip_unit(wavelength, units.m if _HAS_UNITS else None)
+        self.neff = b_to_neff(fibre, self.b, wl=self.wl)
+        self.kz = b_to_kz(fibre, self.b, wl=self.wl)
+        self.k0 = 2 * np.pi / _strip_unit(self.wl, units.m if _HAS_UNITS else None)
 
         self.A, self.B = self._compute_amplitudes()
 
@@ -194,7 +227,7 @@ class GuidedMode:
         float | complex | numpy.ndarray
             Relative permittivity.
         """
-        return self.fibre.eps(rho, self.wavelength)
+        return self.fibre.eps(rho, self.wl)
 
     def mu(self, rho):
         """Evaluate relative permeability at radial coordinate(s).
@@ -209,7 +242,7 @@ class GuidedMode:
         float | complex | numpy.ndarray
             Relative permeability.
         """
-        return self.fibre.mu(rho, self.wavelength)
+        return self.fibre.mu(rho, self.wl)
 
     def n(self, rho):
         """Evaluate refractive index at radial coordinate(s).
@@ -224,7 +257,7 @@ class GuidedMode:
         float | complex | numpy.ndarray
             Refractive index.
         """
-        return self.fibre.n(rho, self.wavelength)
+        return self.fibre.n(rho, self.wl)
 
     def k(self, rho):
         """Evaluate local wave number ``k = k0 * n(rho)``.
@@ -318,11 +351,10 @@ class GuidedMode:
         complex | float
             Modal normalization coefficient used in amplitude normalization.
         """
-        from .dispersion import _wDlnK
         fibre = self.fibre
         ell = int(abs(self.ell))
         V = self.V
-        wl = self.wavelength
+        wl = self.wl
         if A is None:
             A = self.A
         if B is None:
@@ -373,23 +405,15 @@ class GuidedMode:
         ell = self.ell
         b = self.b
         V = self.V
-        wl = self.wavelength
+        wl = self.wl
         ne = self.neff
 
         eps1 = fibre._eval(fibre.eps_core, wl)
         eps2 = fibre._eval(fibre.eps_clad, wl)
         mu1 = fibre._eval(fibre.mu_core, wl)
         mu2 = fibre._eval(fibre.mu_clad, wl)
-
-        u = V * np.sqrt(1 - b)
-        w = V * np.sqrt(b)
-
-        DlnJ = (jvp(ell, u) / jv(ell, u))
-        # DlnK = -(kve(ell - 1, w) + kve(ell+1, w))/(2*kve(ell, w))
-        DlnK = _wDlnK(ell, w)/w
-
-        phi_eps = ((u * w / V) ** 2) * (eps1 / u * DlnJ + eps2 / w * DlnK)
-        phi_mu  = ((u * w / V) ** 2) * (mu1 / u * DlnJ + mu2 / w * DlnK)
+        phi_eps = Phi_alpha(ell=ell, b=b, V=V, alpha=[eps1, eps2])
+        phi_mu = Phi_alpha(ell=ell, b=b, V=V, alpha=[mu1, mu2])
 
         if ell == 0:
             mt = self.mode_type.lower() if self.mode_type is not None else None
@@ -421,8 +445,8 @@ class GuidedMode:
     def _radial_function(self, s, rho):
         rho0 = self.fibre.core_radius
 
-        k1 = self.k0 * self.fibre.n_core(self.wavelength)
-        k2 = self.k0 * self.fibre.n_clad(self.wavelength)
+        k1 = self.k0 * self.fibre.n_core(self.wl)
+        k2 = self.k0 * self.fibre.n_clad(self.wl)
         kz = self.kz
 
         if np.iscomplex(kz):
@@ -528,8 +552,8 @@ class GuidedMode:
         rho_r = np.asarray(np.real(rho), dtype=float)
 
         rho0 = self.fibre.core_radius
-        k1 = self.k0 * self.fibre.n_core(self.wavelength)
-        k2 = self.k0 * self.fibre.n_clad(self.wavelength)
+        k1 = self.k0 * self.fibre.n_core(self.wl)
+        k2 = self.k0 * self.fibre.n_clad(self.wl)
         kz = self.kz
 
         if np.iscomplex(kz):
@@ -558,6 +582,42 @@ class GuidedMode:
                 out[~inside] = gam2 * (_wDlnK(nu, x) / x)
 
         return out
+
+    def _field(self, which, rho=None, phi=None, z=0, *, x=None, y=None, coord="cartesian"):
+        """Evaluate E/H phasor with optional Cartesian or cylindrical output."""
+        which = str(which).upper()
+        if which not in ("E", "H"):
+            raise ValueError("which must be 'E' or 'H'.")
+
+        (rho_f, phi_f, _z_f, shape, phi_phase, s_phase, z_phase, R0, Rp, Rm) = self._prepare_grid(
+            rho=rho, phi=phi, z=z, x=x, y=y
+        )
+        F0, c_plus, c_minus, phi_phase, s_phase, z_phase = self._spin_components(
+            which, rho_f, phi_phase, s_phase, z_phase
+        )
+
+        F0_plus = F0 * R0 * phi_phase * z_phase
+        Fp_plus = c_plus * Rp * np.conj(s_phase) * phi_phase * z_phase
+        Fm_plus = c_minus * Rm * s_phase * phi_phase * z_phase
+
+        minus_sign = -1 if which == "H" else 1
+        F0_minus = minus_sign * F0 * R0 * np.conj(phi_phase) * z_phase
+        Fp_minus = minus_sign * c_minus * Rm * np.conj(s_phase) * np.conj(phi_phase) * z_phase
+        Fm_minus = minus_sign * c_plus * Rp * s_phase * np.conj(phi_phase) * z_phase
+
+        F0 = self.a_plus * F0_plus + self.a_minus * F0_minus
+        Fp = self.a_plus * Fp_plus + self.a_minus * Fp_minus
+        Fm = self.a_plus * Fm_plus + self.a_minus * Fm_minus
+
+        F_cart = spin_to_cartesian(F0, Fp, Fm).reshape(*shape, 3)
+
+        coord = str(coord).lower()
+        if coord.startswith("cart") or coord.startswith("car"):
+            return F_cart
+        if coord.startswith("cyl"):
+            phi_r = np.asarray(np.real(phi_f), dtype=float).reshape(shape)
+            return cartesian_to_cylindrical(F_cart, phi_r)
+        raise ValueError("coord must be 'cartesian' or 'cylindrical'.")
 
     def _grad_field(self, which, rho=None, phi=None, z=0, *, x=None, y=None, coord="cartesian"):
         """
@@ -669,7 +729,7 @@ class GuidedMode:
         return J.reshape(*shape, 3, 3)
 
     # ------------------------------- public API ------------------------------
-    def E(self, rho=None, phi=None, z=0, *, x=None, y=None):
+    def E(self, rho=None, phi=None, z=0, *, x=None, y=None, coord="cartesian"):
         """Evaluate electric field phasor on a transverse grid.
 
         Parameters
@@ -680,11 +740,14 @@ class GuidedMode:
             Longitudinal position in meters.
         x, y : array-like, optional
             Cartesian coordinates in meters.
+        coord : {"cartesian", "cylindrical"}, default="cartesian"
+            Output vector basis. Also accepts ``"cart"``/``"cyl"`` prefixes.
 
         Returns
         -------
         numpy.ndarray
-            Complex electric field with last axis ``(Ex, Ey, Ez)``.
+            Complex electric field with last axis ``(Ex, Ey, Ez)`` for Cartesian,
+            or ``(E_rho, E_phi, E_z)`` for cylindrical output.
 
         Notes
         -----
@@ -693,23 +756,9 @@ class GuidedMode:
         superposition of degenerate ``+/-ell`` partners via ``a_plus`` and
         ``a_minus``.
         """
-        (rho_f, phi_f, z_f, shape, phi_phase, s_phase, z_phase, R0, Rp, Rm) = self._prepare_grid(
-            rho=rho, phi=phi, z=z, x=x, y=y
-        )
-        F0, c_plus, c_minus, phi_phase, s_phase, z_phase = self._spin_components('E', rho_f, phi_phase, s_phase, z_phase)
-        F0_plus = F0 * R0 * phi_phase * z_phase
-        Fp_plus = c_plus * Rp * np.conj(s_phase) * phi_phase * z_phase
-        Fm_plus = c_minus * Rm * s_phase * phi_phase * z_phase
-        F0_minus = F0 * R0 * np.conj(phi_phase) * z_phase
-        Fp_minus = c_minus * Rm * np.conj(s_phase) * np.conj(phi_phase) * z_phase
-        Fm_minus = c_plus * Rp * s_phase * np.conj(phi_phase) * z_phase
-        F0 = self.a_plus * F0_plus + self.a_minus * F0_minus
-        Fp = self.a_plus * Fp_plus + self.a_minus * Fp_minus
-        Fm = self.a_plus * Fm_plus + self.a_minus * Fm_minus
-
-        return spin_to_cartesian(F0, Fp, Fm).reshape(*shape, 3)
+        return self._field("E", rho=rho, phi=phi, z=z, x=x, y=y, coord=coord)
     
-    def H(self, rho=None, phi=None, z=0, *, x=None, y=None):
+    def H(self, rho=None, phi=None, z=0, *, x=None, y=None, coord="cartesian"):
         """Evaluate magnetic field phasor on a transverse grid.
 
         Parameters
@@ -720,32 +769,21 @@ class GuidedMode:
             Longitudinal position in meters.
         x, y : array-like, optional
             Cartesian coordinates in meters.
+        coord : {"cartesian", "cylindrical"}, default="cartesian"
+            Output vector basis. Also accepts ``"cart"``/``"cyl"`` prefixes.
 
         Returns
         -------
         numpy.ndarray
-            Complex magnetic field with last axis ``(Hx, Hy, Hz)``.
+            Complex magnetic field with last axis ``(Hx, Hy, Hz)`` for Cartesian,
+            or ``(H_rho, H_phi, H_z)`` for cylindrical output.
 
         Notes
         -----
         Uses the same modal ansatz and phase convention as :meth:`E`, with magnetic
         spin components linked to electric ones through Maxwell-coupled amplitudes.
         """
-        (rho_f, phi_f, z_f, shape, phi_phase, s_phase, z_phase, R0, Rp, Rm) = self._prepare_grid(
-            rho=rho, phi=phi, z=z, x=x, y=y
-        )
-        F0, c_plus, c_minus, phi_phase, s_phase, z_phase = self._spin_components('H', rho_f, phi_phase, s_phase, z_phase)
-        F0_plus = F0 * R0 * phi_phase * z_phase
-        Fp_plus = c_plus * Rp * np.conj(s_phase) * phi_phase * z_phase
-        Fm_plus = c_minus * Rm * s_phase * phi_phase * z_phase
-        F0_minus = -F0 * R0 * np.conj(phi_phase) * z_phase
-        Fp_minus = -c_minus * Rm * np.conj(s_phase) * np.conj(phi_phase) * z_phase
-        Fm_minus = -c_plus * Rp * s_phase * np.conj(phi_phase) * z_phase
-        F0 = self.a_plus * F0_plus + self.a_minus * F0_minus
-        Fp = self.a_plus * Fp_plus + self.a_minus * Fp_minus
-        Fm = self.a_plus * Fm_plus + self.a_minus * Fm_minus
-
-        return spin_to_cartesian(F0, Fp, Fm).reshape(*shape, 3)
+        return self._field("H", rho=rho, phi=phi, z=z, x=x, y=y, coord=coord)
     
     def gradE(self, rho=None, phi=None, z=0, *, x=None, y=None, coord="cartesian"):
         """Evaluate spatial Jacobian of the electric field.
@@ -948,6 +986,7 @@ class GuidedMode:
         return P
 
     # ------------------------------ labelling --------------------------------
+    @property
     def mode_label(self):
         """Return HTML-formatted mode family label.
 
@@ -990,23 +1029,70 @@ class GuidedMode:
                 return self.m
         return (self.m + 1) // 2
 
-    def __repr__(self):
+    @property
+    def S0(self):
+        """Unnormalised Stokes-like intensity parameter."""
+        return np.abs(self.a_plus) ** 2 + np.abs(self.a_minus) ** 2
+
+    def _stokes_raw_from_coeffs(self):
         S0 = np.abs(self.a_plus) ** 2 + np.abs(self.a_minus) ** 2
-        S1 = 2 * np.real(self.a_plus * np.conj(self.a_minus))/S0
-        S2 = 2 * np.imag(self.a_plus * np.conj(self.a_minus))/S0
-        S3 = (np.abs(self.a_plus) ** 2 - np.abs(self.a_minus) ** 2)/S0
+        S1 = 2 * np.real(self.a_plus * np.conj(self.a_minus))
+        S2 = 2 * np.imag(self.a_plus * np.conj(self.a_minus))
+        S3 = np.abs(self.a_plus) ** 2 - np.abs(self.a_minus) ** 2
+        return S0, S1, S2, S3
+
+    def _stokes_normalised_components(self):
+        S0, S1_raw, S2_raw, S3_raw = self._stokes_raw_from_coeffs()
+        if self.ell == 0:
+            mt = (self.mode_type or "").upper()
+            if mt == "TE":
+                return -1.0, 0.0, 0.0
+            if mt == "TM":
+                return 1.0, 0.0, 0.0
+        if np.isclose(S0, 0.0):
+            return np.nan, np.nan, np.nan
+        return S1_raw / S0, S2_raw / S0, S3_raw / S0
+
+    @property
+    def S1(self):
+        """Unnormalised Stokes-like parameter ``S0 * s1``."""
+        s1, _, _ = self._stokes_normalised_components()
+        return self.S0 * s1
+
+    @property
+    def S2(self):
+        """Unnormalised Stokes-like parameter ``S0 * s2``."""
+        _, s2, _ = self._stokes_normalised_components()
+        return self.S0 * s2
+
+    @property
+    def S3(self):
+        """Unnormalised Stokes-like parameter ``S0 * s3``."""
+        _, _, s3 = self._stokes_normalised_components()
+        return self.S0 * s3
+
+    def stokes(self, normalised=False):
+        """Return Stokes-like parameters derived from ``a_plus/a_minus``."""
+        S0 = self.S0
+        s1, s2, s3 = self._stokes_normalised_components()
+        if not normalised:
+            return S0, S0 * s1, S0 * s2, S0 * s3
+        return S0, s1, s2, s3
+
+    def __repr__(self):
+        S0, S1, S2, S3 = self.stokes(normalised=True)
         return (
             f"<GuidedMode {self.mode_type} (ℓ={self.ell}, n={self.m}), "
-            f"λ={self.wavelength:.2e}, V={self.V:.2f}, neff={self.neff:.4f}, (S₁,S₂,S₃) = {S0:.2f} · ({S1:.2f}, {S2:.2f}, {S3:.2f})>"
+            f"λ={self.wl:.2e}, V={self.V:.2f}, neff={self.neff:.4f}, (S₁,S₂,S₃) = {S0:.2f} · ({S1:.2f}, {S2:.2f}, {S3:.2f})>"
             # f"A={self.A:.3f}, B={self.B:.3f}>"
         )
     # ------------------------------ rich display -----------------------------
     def _repr_html_(self):
         from .utils import _HAS_UNITS, wavelength_to_rgb, wavelength_band_label_nm
         try:
-            wl_nm = self.wavelength.to_value('nm') if _HAS_UNITS else float(self.wavelength) * 1e9
+            wl_nm = self.wl.to_value('nm') if _HAS_UNITS else float(self.wl) * 1e9
         except Exception:
-            wl_nm = float(self.wavelength) * 1e9
+            wl_nm = float(self.wl) * 1e9
 
         def _swatch(bg_css, label=None):
             text = (label or "")
@@ -1032,19 +1118,7 @@ class GuidedMode:
         else:
             swatch_html = ""
 
-        # stokes parameters for ell\neq 0
-        if self.ell != 0:
-            S0 = np.abs(self.a_plus) ** 2 + np.abs(self.a_minus) ** 2
-            S1 = 2 * np.real(self.a_plus * np.conj(self.a_minus))/S0
-            S2 = 2 * np.imag(self.a_plus * np.conj(self.a_minus))/S0
-            S3 = (np.abs(self.a_plus) ** 2 - np.abs(self.a_minus) ** 2)/S0
-            
-        elif self.mode_type == "TE":
-            S0 = np.abs(self.a_plus) ** 2 + np.abs(self.a_minus) ** 2
-            S1, S2, S3 = -1.0, 0.0, 0.0
-        elif self.mode_type == "TM":
-            S0 = np.abs(self.a_plus) ** 2 + np.abs(self.a_minus) ** 2
-            S1, S2, S3 = 1.0, 0.0, 0.0
+        S0, S1, S2, S3 = self.stokes(normalised=True)
         def fmt_signed(x):
             return f"{x:+.2f}".replace("+", "\u2008")
 
@@ -1096,7 +1170,7 @@ class GuidedMode:
             </thead>
             <tbody>
             <tr>
-                <td style="text-align:center;">{self.mode_label()}</td>
+                <td style="text-align:center;">{self.mode_label}</td>
                 <!-- <td style="text-align:center;">{self.ell}</td>
                 <td style="text-align:center;">{self.m}</td> -->
                 <td class="num">{swatch_html}{wl_nm:.2f}</td>

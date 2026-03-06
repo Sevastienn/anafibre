@@ -1,10 +1,7 @@
 """
-utils.py
-
 Utility functions and optional dependency management for Anafibre.
 Includes unit handling and color conversion for wavelength visualisation.
 """
-
 try:
     import astropy.units as units
     _HAS_UNITS = True
@@ -12,11 +9,31 @@ except ImportError:
     _HAS_UNITS = False
     units = None  # Gracefully handle absence of astropy
 
+try:
+    from refractiveindex.refractiveindex import RefractiveIndexMaterial as RIMaterial, NoExtinctionCoefficient
+    _HAS_REFRACTIVEINDEX = True
+except ImportError:
+    _HAS_REFRACTIVEINDEX = False
+    RIMaterial = None
+    NoExtinctionCoefficient = Exception
+
 def _strip_unit(val, unit=None):
-    """
-    Converts an input value (float or astropy Quantity) to float in desired units.
-    If val has no unit, returns as-is.
-    If unit is given, converts to that unit.
+    """Return the numeric value of an input with optional unit conversion.
+
+    Parameters
+    ----------
+    val : Any
+        Scalar or array-like value. If ``astropy`` is available and ``val`` has a
+        ``unit`` attribute, the value is converted to plain numbers.
+    unit : astropy.units.Unit | None, optional
+        Target unit for conversion when ``val`` is a quantity. If ``None``,
+        SI base units are used.
+
+    Returns
+    -------
+    Any
+        Numeric value (or array of values) when ``val`` is a quantity; otherwise
+        returns ``val`` unchanged.
     """
     if _HAS_UNITS and hasattr(val, 'unit'):
         if unit is not None:
@@ -24,54 +41,59 @@ def _strip_unit(val, unit=None):
         return val.si.value
     return val
 
-def wavelength_to_rgb(wavelength):
+def wavelength_to_rgb(wl):
     """Map visible wavelength to an approximate sRGB color.
 
     Parameters
     ----------
-    wavelength : float
+    wl : float
         Wavelength in nanometers.
 
     Returns
     -------
     tuple[float, float, float]
-        Normalized ``(R, G, B)`` values in the range ``[0, 1]``.
+        Normalised ``(R, G, B)`` values in the range ``[0, 1]``.
         Values outside the visible range (380-780 nm) return black ``(0, 0, 0)``.
+
+    Notes
+    -----
+    Uses a standard piecewise approximation for visible-spectrum mapping rather
+    than a colorimetrically exact CIE conversion.
     """
-    if wavelength < 380 or wavelength > 780:
+    if wl < 380 or wl > 780:
         return (0, 0, 0)  # Outside visible range
 
-    if wavelength < 440:
-        R = -(wavelength - 440) / (440 - 380)
+    if wl < 440:
+        R = -(wl - 440) / (440 - 380)
         G = 0.0
         B = 1.0
-    elif wavelength < 490:
+    elif wl < 490:
         R = 0.0
-        G = (wavelength - 440) / (490 - 440)
+        G = (wl - 440) / (490 - 440)
         B = 1.0
-    elif wavelength < 510:
+    elif wl < 510:
         R = 0.0
         G = 1.0
-        B = -(wavelength - 510) / (510 - 490)
-    elif wavelength < 580:
-        R = (wavelength - 510) / (580 - 510)
+        B = -(wl - 510) / (510 - 490)
+    elif wl < 580:
+        R = (wl - 510) / (580 - 510)
         G = 1.0
         B = 0.0
-    elif wavelength < 645:
+    elif wl < 645:
         R = 1.0
-        G = -(wavelength - 645) / (645 - 580)
+        G = -(wl - 645) / (645 - 580)
         B = 0.0
     else:
         R = 1.0
         G = 0.0
         B = 0.0
 
-    if wavelength < 420:
-        factor = 0.3 + 0.7 * (wavelength - 380) / (420 - 380)
-    elif wavelength < 645:
+    if wl < 420:
+        factor = 0.3 + 0.7 * (wl - 380) / (420 - 380)
+    elif wl < 645:
         factor = 1.0
     else:
-        factor = 0.3 + 0.7 * (780 - wavelength) / (780 - 645)
+        factor = 0.3 + 0.7 * (780 - wl) / (780 - 645)
 
     R = round(R * factor * 255)
     G = round(G * factor * 255)
@@ -80,7 +102,7 @@ def wavelength_to_rgb(wavelength):
     return (R / 255, G / 255, B / 255)
 
 def wavelength_band_label_nm(wl_nm):
-        """Classify wavelength band labels for non-visible wavelengths.
+        """Classify non-visible wavelengths into coarse EM-band labels.
 
         Parameters
         ----------
@@ -92,6 +114,11 @@ def wavelength_band_label_nm(wl_nm):
         tuple[str | None, str | None]
             A tuple ``(label, color_hex)``. Visible wavelengths return ``(None, None)``
             because they are rendered with :func:`wavelength_to_rgb`.
+
+        Notes
+        -----
+        The THz window (30 um to 3 mm) takes precedence over overlapping broader
+        infrared/microwave naming ranges.
         """
         if wl_nm is None or not (wl_nm > 0):
             return None, None
@@ -149,6 +176,16 @@ def pretty_length(qty, digits=3):
     -------
     str
         A LaTeX snippet without surrounding ``$`` delimiters.
+
+    Raises
+    ------
+    AttributeError
+        If ``qty`` is not an astropy quantity-like object with ``to_value``.
+
+    Notes
+    -----
+    Chooses the first unit in ``(m, cm, mm, um, nm)`` whose absolute numeric value
+    lies in ``[1, 1000)``; otherwise falls back to meters.
     """
     for unit in (units.m, units.cm, units.mm, units.um, units.nm):
         v = qty.to_value(unit)
@@ -165,17 +202,24 @@ def repr_html_modes(modes):
     Parameters
     ----------
     modes : iterable
-        Iterable of guided-mode-like objects with ``mode_label``, ``wavelength``,
-        ``V``, ``neff``, ``a_plus`` and ``a_minus`` attributes.
+        Iterable of guided-mode-like objects with at least ``mode_label``, ``wl``,
+        ``V``, ``neff``, ``a_plus`` and ``a_minus`` attributes. Optional attributes
+        ``ell`` and ``mode_type`` are used to select polarization conventions for
+        Stokes parameters.
 
     Returns
     -------
     str
         HTML markup for a styled table. Returns an empty string if no valid modes
         are provided.
+
+    Notes
+    -----
+    For ``ell != 0``, normalized Stokes parameters are computed from ``a_plus`` and
+    ``a_minus``. For ``ell == 0``, TE is rendered as linear ``S1=-1`` and all other
+    ``ell == 0`` modes as ``S1=+1``.
     """
     import numpy as np
-    from .utils import _HAS_UNITS, wavelength_to_rgb, wavelength_band_label_nm
 
     modes = [m for m in modes if m is not None]
     if not modes:
@@ -199,16 +243,10 @@ def repr_html_modes(modes):
 
     rows = []
     for m in modes:
-        # Wavelength + swatch
-        # try:
-        #     wl_nm = m.wavelength.to_value('nm') if _HAS_UNITS else float(m.wavelength) * 1e9
-        #     wl_str = f"{wl_nm:.2f}"
-        # except Exception:
-        #     wl_nm, wl_str = None, f"{m.wavelength:.2e}"
         try:
-            wl_nm = m.wavelength.to_value('nm') if _HAS_UNITS else float(m.wavelength) * 1e9
+            wl_nm = m.wl.to_value('nm') if _HAS_UNITS else float(m.wl) * 1e9
         except Exception:
-            wl_nm = float(m.wavelength) * 1e9
+            wl_nm = float(m.wl) * 1e9
 
         label, gray = wavelength_band_label_nm(wl_nm) if wl_nm is not None else (None, None)
         if wl_nm is not None and 380 <= wl_nm <= 780:
@@ -237,7 +275,7 @@ def repr_html_modes(modes):
 
         rows.append(f"""
         <tr>
-            <td style="text-align:center;">{m.mode_label()}</td>
+            <td style="text-align:center;">{m.mode_label}</td>
             <td class="num">{swatch_html}{wl_nm:.2f}</td>
             <td class="num">{m.V:.2f}</td>
             <td class="num">{m.neff:.4f}</td>
@@ -290,9 +328,12 @@ def repr_html_modes(modes):
     """
     return html
 
-
 class GuidedModeList(list):
-    """List of GuidedMode objects with notebook HTML representation."""
+    """List subclass that preserves rich HTML display for mode collections.
+
+    Slicing returns another :class:`GuidedModeList` so notebook rendering via
+    ``_repr_html_`` is retained for subsets.
+    """
 
     def __getitem__(self, item):
         result = super().__getitem__(item)
@@ -302,3 +343,45 @@ class GuidedModeList(list):
 
     def _repr_html_(self):
         return repr_html_modes(self)
+
+def display_modes(*modes):
+    """Render one or more guided modes as an HTML table in notebooks.
+
+    Parameters
+    ----------
+    *modes
+        One or more :class:`anafibre.fields.GuidedMode` objects.
+
+    Returns
+    -------
+    None
+        Displays HTML output via IPython.
+
+    Notes
+    -----
+    Intended for notebook environments where ``IPython.display`` is available.
+    """
+    from IPython.display import display_html
+    
+    display_html(repr_html_modes(modes), raw=True)
+
+def display_anim(anim):
+    """Render a Matplotlib animation inline in notebooks.
+
+    Parameters
+    ----------
+    anim : matplotlib.animation.Animation
+        Animation instance with a ``to_jshtml`` method.
+
+    Returns
+    -------
+    None
+        Displays the animation via IPython HTML output.
+
+    Notes
+    -----
+    Uses ``anim.to_jshtml()`` for inline playback in Jupyter-style frontends.
+    """
+    from IPython.display import HTML, display
+
+    display(HTML(anim.to_jshtml()))

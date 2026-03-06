@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "anafibre"
-version = "0.1.1"
+dynamic = ["version"]
 authors = [
   { name = "Sebastian Golat", email = "sebastian.golat@gmail.com" },
 ]
@@ -15,32 +15,54 @@ requires-python = ">=3.10"
 dependencies = [
   "numpy>=1.20.0",
   "scipy>=1.7.0",
-  "matplotlib>=3.5.0",
-  "IPython>=7.0.0",
+]
+
+keywords = [
+  "optics",
+  "photonics",
+  "fiber-optics",
+  "waveguide",
+  "electromagnetics",
+  "mode-solver",
+  "step-index-fiber",
 ]
 
 classifiers = [
   "Development Status :: 3 - Alpha",
-  "Programming Language :: Python :: 3",
   "Intended Audience :: Science/Research",
   "Topic :: Scientific/Engineering :: Physics",
+  "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
 ]
 
 license = { text = "MIT" }
 
 [tool.hatch.metadata]
-# Include license files in the sdist/wheel
-# (Hatch uses tool.* configuration for this kind of packaging detail)
-license-files = ["LICEN[CS]E*"]
+license-files = ["LICENSE*"]
 
 [project.optional-dependencies]
+ipython = ["IPython>=7.0.0"]
+plot = ["matplotlib>=3.5.0"]
 units = ["astropy>=4.0.0"]
-refractiveindex = ["refractiveindex>=1.0.0"]
-all = ["anafibre[units,refractiveindex]"]
+refractiveindex = ["refractiveindex>=1.0.2"]
+all = [
+  "IPython>=7.0.0",
+  "matplotlib>=3.5.0",
+  "astropy>=4.0.0",
+  "refractiveindex>=1.0.2",
+]
 
 [project.urls]
 Homepage = "https://github.com/Sevastienn/anafibre"
 Repository = "https://github.com/Sevastienn/anafibre"
 Documentation = "https://github.com/Sevastienn/anafibre#readme"
 Issues = "https://github.com/Sevastienn/anafibre/issues"
+
+[tool.hatch.version]
+path = "src/anafibre/__init__.py"

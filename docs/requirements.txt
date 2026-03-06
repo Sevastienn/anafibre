@@ -1,0 +1,6 @@
+# Documentation dependencies for local builds and Read the Docs
+mkdocs<2
+mkdocs-material<10
+mkdocstrings[python]>=0.30
+pymdown-extensions>=10.14
+black>=24
